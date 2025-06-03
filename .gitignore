@@ -1,156 +1,16 @@
-# TALM MCP Server .gitignore
-
-# ================================
-# Python
-# ================================
+# Python-generated files
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
+*.py[oc]
 build/
-develop-eggs/
 dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
 wheels/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+*.egg-info
 
-# ================================
-# UV (Python package manager)
-# ================================
-.venv/
-uv.lock
-.uv-cache/
+# Virtual environments
+.venv
 
-# ================================
-# Virtual Environments
-# ================================
-venv/
-env/
-ENV/
-env.bak/
-venv.bak/
+# Jetbrains
+.idea
 
-# ================================
-# Kubernetes & OpenShift
-# ================================
-# Kubeconfig files (sensitive!)
-*kubeconfig*
-*.kubeconfig
-config
-.kube/
-kubeconfig-*
-
-# Service account tokens
-token
-*.token
-
-# TLS certificates and keys
-*.pem
-*.crt
-*.key
-*.p12
-*.pfx
-
-# ================================
-# MCP Specific
-# ================================
-# Claude Desktop config (might contain sensitive paths)
-claude_desktop_config.json
-mcp_config.json
-
-# MCP logs
-mcp*.log
-
-# ================================
-# Environment & Secrets
-# ================================
-.env
-.env.local
-.env.development
-.env.test
-.env.production
-.env.*
-
-# Secrets and credentials
-secrets/
-credentials/
-*.secret
-*.credential
-
-# ================================
-# IDE & Editors
-# ================================
-# VS Code
-.vscode/
-*.code-workspace
-
-# PyCharm
-.idea/
-*.iml
-*.iws
-*.ipr
-
-# ================================
-# OS Generated
-# ================================
 # macOS
 .DS_Store
-
-# ================================
-# Logs & Temporary Files
-# ================================
-*.log
-logs/
-log/
-temp/
-tmp/
-cache/
-
-# ================================
-# Testing & Coverage
-# ================================
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-.nox/
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-
-
-# ================================
-# Backup Files
-# ================================
-*.bak
-*.backup
-*.old
-*.orig
-
-# ================================
-# Project Specific
-# ================================
-# Compiled Python bytecode
-*.pyc
-
-# Local development files
-dev-*
-local-*
-scratch/
-playground/
-
-# Docker
-.dockerignore
