@@ -34,10 +34,8 @@ uv run python server.py --transport streamable-http --port 8080
 ### Core Components
 
 **TALMContext**: Shared context class that manages Kubernetes client connections:
-- `k8s_client`: Core Kubernetes API client  
-- `dynamic_client`: Dynamic client for CRD operations
-- `core_v1`: Core V1 API for basic resources
-- `apps_v1`: Apps V1 API for deployments/statefulsets
+- `k8s_client`: Core Kubernetes API client (used for connection testing and creating dynamic client)
+- `dynamic_client`: Dynamic client for all CRD operations (ManagedCluster, Policy, ClusterGroupUpgrade)
 
 **Lifespan Management**: The `talm_lifespan()` function handles:
 - Kubernetes configuration loading (in-cluster → local kubeconfig → mock mode)
@@ -45,8 +43,8 @@ uv run python server.py --transport streamable-http --port 8080
 - Graceful fallback to offline mode when cluster unavailable
 
 **MCP Categories**:
-- **Resources**: Read-only data access (clusters, policies, status)
-- **Tools**: Actions with side effects (remediation, health checks)  
+- **Resources**: Read-only data access (clusters, policies, status) - returns structured objects (dicts/lists)
+- **Tools**: Actions with side effects (remediation, health checks) - returns structured objects for analysis
 - **Prompts**: Reusable templates for common workflows
 
 ### Key CRD Integrations
@@ -79,3 +77,13 @@ The server implements graceful degradation:
 - All CRD operations use dynamic client for flexibility
 - ClusterGroupUpgrade creation follows TALM patterns (batching, timeouts)
 - Server can run in stdio or HTTP transport modes
+
+### API Data Format
+
+**Resources and Tools Return Format**: All resources and tools return structured Python objects (dictionaries and lists) rather than JSON strings. This makes the data easier for AI systems to parse and analyze:
+
+- **Resources**: `list_clusters()` and `list_policies()` return `List[Dict[str, Any]]`
+- **Status Resources**: `get_cluster_status()` returns `Dict[str, Any]` 
+- **Tools**: `check_cluster_health()` and `list_active_cgus()` return structured objects
+- **Kubernetes Objects**: All K8s objects are converted using `.to_dict()` for JSON serialization
+- **Tools with Side Effects**: `remediate_cluster()` and `server_status()` still return JSON strings for backward compatibility

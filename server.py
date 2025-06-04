@@ -29,8 +29,6 @@ class TALMContext:
     """Shared context for TALM operations"""
     k8s_client: Optional[client.ApiClient] = None
     dynamic_client: Optional[DynamicClient] = None
-    core_v1: Optional[client.CoreV1Api] = None
-    apps_v1: Optional[client.AppsV1Api] = None
 
 
 def get_ctx_or_raise() -> TALMContext:
@@ -69,13 +67,13 @@ async def talm_lifespan(server: FastMCP) -> AsyncIterator[TALMContext]:
         # Initialize clients with connection validation
         try:
             k8s_client = client.ApiClient()
-
-            # Test connection
-            core_v1 = client.CoreV1Api()
-            logger.info("Testing cluster connectivity...")
             dynamic_client = DynamicClient(k8s_client)
-            apps_v1 = client.AppsV1Api()
-
+            
+            logger.info("Testing cluster connectivity...")
+            # Test connection by attempting to list namespaces
+            core_v1 = client.CoreV1Api()
+            core_v1.list_namespace(limit=1)
+            
             logger.info("TALM MCP Server initialized successfully")
 
         except Exception as conn_error:
@@ -88,9 +86,7 @@ async def talm_lifespan(server: FastMCP) -> AsyncIterator[TALMContext]:
 
         ctx = TALMContext(
             k8s_client=k8s_client,
-            dynamic_client=dynamic_client,
-            core_v1=core_v1,
-            apps_v1=apps_v1
+            dynamic_client=dynamic_client
         )
 
         yield ctx
@@ -215,19 +211,18 @@ def server_status() -> str:
         JSON string containing server status, client availability, and recommendations
     """
     try:
-        ctx = mcp.get_context().request_context.lifespan_context
+        ctx: Context = mcp.get_context()
+        lifespan_ctx = ctx.request_context.lifespan_context
 
         status = {
             "server_running": True,
-            "kubernetes_client": ctx.k8s_client is not None,
-            "dynamic_client": ctx.dynamic_client is not None,
-            "core_v1_api": ctx.core_v1 is not None,
-            "apps_v1_api": ctx.apps_v1 is not None,
-            "cluster_connected": ctx.dynamic_client is not None,
+            "kubernetes_client": lifespan_ctx.k8s_client is not None,
+            "dynamic_client": lifespan_ctx.dynamic_client is not None,
+            "cluster_connected": lifespan_ctx.dynamic_client is not None,
             "recommendations": []
         }
 
-        if ctx.dynamic_client is None:
+        if lifespan_ctx.dynamic_client is None:
             status["recommendations"] = [
                 "Check your kubeconfig file",
                 "Ensure cluster is accessible",
