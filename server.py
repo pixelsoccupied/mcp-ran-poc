@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 import logging
 
 from mcp.server.fastmcp import FastMCP, Context
+from mcp.server.fastmcp.exceptions import ResourceError, ToolError
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
 from kubernetes.dynamic import DynamicClient
@@ -23,16 +24,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def get_ctx_or_error():
-    """Get TALM context or return offline error"""
-    ctx = mcp.get_context().request_context.lifespan_context
-    if ctx.dynamic_client is None:
-        return None, json.dumps({
-            "error": "No cluster connection available",
-            "message": "Server started in offline mode - check your kubeconfig and cluster connectivity"
-        })
-    return ctx, None
-
 
 @dataclass
 class TALMContext:
@@ -41,6 +32,16 @@ class TALMContext:
     dynamic_client: Optional[DynamicClient] = None
     core_v1: Optional[client.CoreV1Api] = None
     apps_v1: Optional[client.AppsV1Api] = None
+
+
+def get_ctx_or_raise() -> TALMContext:
+    """Get TALM context or raise proper MCP error"""
+    ctx = mcp.get_context().request_context.lifespan_context
+    if ctx.dynamic_client is None:
+        raise ResourceError(
+            "No cluster connection available. Server started in offline mode - check your kubeconfig and cluster connectivity"
+        )
+    return ctx
 
 
 @asynccontextmanager
@@ -118,9 +119,7 @@ mcp = FastMCP("TALM MCP Server", lifespan=talm_lifespan)
 def list_clusters() -> str:
     """List all managed clusters in ACM"""
     try:
-        ctx, error = get_ctx_or_error()
-        if error:
-            return error
+        ctx = get_ctx_or_raise()
 
         managed_cluster_api = ctx.dynamic_client.resources.get(
             api_version="cluster.open-cluster-management.io/v1",
@@ -130,18 +129,18 @@ def list_clusters() -> str:
         clusters = managed_cluster_api.get()
         return json.dumps(clusters.items, default=str, indent=2)
 
+    except ApiException as e:
+        raise ResourceError(f"Kubernetes API error: {e.reason}")
     except Exception as e:
         logger.error(f"Failed to list clusters: {e}")
-        return json.dumps({"error": f"Failed to list clusters: {str(e)}"})
+        raise ResourceError(f"Failed to list clusters: {str(e)}")
 
 
 @mcp.resource("talm://policies")
 def list_policies() -> str:
     """List all policies bound to managed clusters"""
     try:
-        ctx, error = get_ctx_or_error()
-        if error:
-            return error
+        ctx = get_ctx_or_raise()
 
         policy_api = ctx.dynamic_client.resources.get(
             api_version="policy.open-cluster-management.io/v1",
@@ -151,18 +150,18 @@ def list_policies() -> str:
         policies = policy_api.get()
         return json.dumps(policies.items, default=str, indent=2)
 
+    except ApiException as e:
+        raise ResourceError(f"Kubernetes API error: {e.reason}")
     except Exception as e:
         logger.error(f"Failed to list policies: {e}")
-        return json.dumps({"error": f"Failed to list policies: {str(e)}"})
+        raise ResourceError(f"Failed to list policies: {str(e)}")
 
 
 @mcp.resource("talm://clusters/{cluster_name}/status")
 def get_cluster_status(cluster_name: str) -> str:
     """Get detailed status for a specific cluster"""
     try:
-        ctx, error = get_ctx_or_error()
-        if error:
-            return error
+        ctx = get_ctx_or_raise()
 
         managed_cluster_api = ctx.dynamic_client.resources.get(
             api_version="cluster.open-cluster-management.io/v1",
@@ -192,11 +191,11 @@ def get_cluster_status(cluster_name: str) -> str:
 
     except ApiException as e:
         if e.status == 404:
-            return json.dumps({"error": f"Cluster {cluster_name} not found"})
-        return json.dumps({"error": f"API error: {e.reason}"})
+            raise ResourceError(f"Cluster {cluster_name} not found")
+        raise ResourceError(f"Kubernetes API error: {e.reason}")
     except Exception as e:
         logger.error(f"Failed to get cluster status: {e}")
-        return json.dumps({"error": f"Failed to get cluster status: {str(e)}"})
+        raise ResourceError(f"Failed to get cluster status: {str(e)}")
 
 
 # ================================
@@ -254,9 +253,7 @@ def remediate_cluster(cluster_name: str) -> str:
         JSON string with remediation status, CGU name, and monitoring information
     """
     try:
-        ctx, error = get_ctx_or_error()
-        if error:
-            return json.dumps({"success": False, **json.loads(error)})
+        ctx = get_ctx_or_raise()
 
         # Check if cluster exists (v1)
         managed_cluster_api = ctx.dynamic_client.resources.get(
@@ -268,12 +265,8 @@ def remediate_cluster(cluster_name: str) -> str:
             cluster = managed_cluster_api.get(name=cluster_name)
         except ApiException as e:
             if e.status == 404:
-                return json.dumps({
-                    "success": False,
-                    "error": "Cluster not found",
-                    "cluster_name": cluster_name
-                })
-            raise
+                raise ToolError(f"Cluster {cluster_name} not found")
+            raise ToolError(f"Kubernetes API error: {e.reason}")
 
         # Create ClusterGroupUpgrade for remediation (v1alpha1)
         cgu_api = ctx.dynamic_client.resources.get(
@@ -321,10 +314,7 @@ def remediate_cluster(cluster_name: str) -> str:
 
     except Exception as e:
         logger.error(f"Failed to remediate cluster {cluster_name}: {e}")
-        return json.dumps({
-            "success": False,
-            "error": f"Failed to remediate cluster '{cluster_name}': {str(e)}"
-        })
+        raise ToolError(f"Failed to remediate cluster '{cluster_name}': {str(e)}")
 
 
 @mcp.tool()
@@ -459,7 +449,7 @@ Use the TALM tools to implement this batch processing approach."""
 # MAIN EXECUTION
 # ================================
 
-def main():
+def main() -> None:
     """Main entry point for the TALM MCP Server"""
     import argparse
 

@@ -15,5 +15,5 @@ wheels/
 # macOS
 .DS_Store
 
-# Claude local settings
+# Claude Code settings
 .claude/settings.local.json
