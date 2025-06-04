@@ -300,7 +300,14 @@ def get_cluster_status(cluster_name: str) -> str:
 
 @mcp.tool()
 def server_status() -> str:
-    """Check TALM MCP Server status and connectivity"""
+    """Check TALM MCP Server status and Kubernetes cluster connectivity.
+    
+    Returns a JSON object with server component status, cluster connection state,
+    and troubleshooting recommendations if issues are detected.
+    
+    Returns:
+        JSON string containing server status, client availability, and recommendations
+    """
     try:
         ctx = mcp.get_context().request_context.lifespan_context
 
@@ -330,7 +337,17 @@ def server_status() -> str:
 
 @mcp.tool()
 def remediate_cluster(cluster_name: str) -> str:
-    """Re-apply all non-compliant policies for a specific cluster"""
+    """Create a ClusterGroupUpgrade to remediate policy compliance issues for a specific cluster.
+    
+    This tool creates a TALM ClusterGroupUpgrade resource that will re-apply all
+    non-compliant policies to bring the cluster back into compliance.
+    
+    Args:
+        cluster_name: Name of the ManagedCluster to remediate
+        
+    Returns:
+        JSON string with remediation status, CGU name, and monitoring information
+    """
     try:
         ctx = mcp.get_context().request_context.lifespan_context
 
@@ -412,7 +429,17 @@ def remediate_cluster(cluster_name: str) -> str:
 
 @mcp.tool()
 def check_cluster_health(cluster_name: str) -> str:
-    """Perform a comprehensive health check on a cluster"""
+    """Analyze the health status of a specific managed cluster.
+    
+    Examines cluster conditions, recent operations, and provides a comprehensive
+    health assessment including any issues that need attention.
+    
+    Args:
+        cluster_name: Name of the ManagedCluster to check
+        
+    Returns:
+        JSON string with health status, issues, Kubernetes version, and recent CGU operations
+    """
     try:
         ctx = mcp.get_context().request_context.lifespan_context
 
@@ -512,7 +539,14 @@ def check_cluster_health(cluster_name: str) -> str:
 
 @mcp.tool()
 def list_active_cgus() -> str:
-    """List all currently active ClusterGroupUpgrades"""
+    """List all currently active ClusterGroupUpgrade operations.
+    
+    Returns ClusterGroupUpgrades that are in progress, timed out, or partially done.
+    Useful for monitoring ongoing TALM operations across the cluster fleet.
+    
+    Returns:
+        JSON string with active CGUs, their status, target clusters, and configuration
+    """
     try:
         ctx = mcp.get_context().request_context.lifespan_context
 
@@ -639,3 +673,10 @@ def main():
 
 if __name__ == "__main__":
     main()
+    # policy from the cluster (look at a policy in ns)
+    # go look at all my cluster - for any that are not complient and go remediate
+
+    # delete the existing
+
+    # oran sql
+    # how far from vllm
