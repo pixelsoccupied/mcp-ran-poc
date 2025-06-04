@@ -5,19 +5,18 @@ A Model Context Protocol server for managing cluster lifecycle operations.
 """
 
 import json
-import asyncio
-from contextlib import asynccontextmanager
+import logging
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-import logging
 
-from mcp.server.fastmcp import FastMCP, Context
-from mcp.server.fastmcp.exceptions import ResourceError, ToolError
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
 from kubernetes.dynamic import DynamicClient
+from mcp.server.fastmcp import FastMCP, Context
+from mcp.server.fastmcp.exceptions import ResourceError, ToolError
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -36,12 +35,13 @@ class TALMContext:
 
 def get_ctx_or_raise() -> TALMContext:
     """Get TALM context or raise proper MCP error"""
-    ctx = mcp.get_context().request_context.lifespan_context
-    if ctx.dynamic_client is None:
+    ctx: Context = mcp.get_context()
+    lifespan_context = ctx.request_context.lifespan_context
+    if lifespan_context.dynamic_client is None:
         raise ResourceError(
             "No cluster connection available. Server started in offline mode - check your kubeconfig and cluster connectivity"
         )
-    return ctx
+    return lifespan_context
 
 
 @asynccontextmanager
@@ -116,7 +116,7 @@ mcp = FastMCP("TALM MCP Server", lifespan=talm_lifespan)
 # ================================
 
 @mcp.resource("talm://clusters")
-def list_clusters() -> str:
+def list_clusters() -> List[Dict[str, Any]]:
     """List all managed clusters in ACM"""
     try:
         ctx = get_ctx_or_raise()
@@ -127,7 +127,8 @@ def list_clusters() -> str:
         )
 
         clusters = managed_cluster_api.get()
-        return json.dumps(clusters.items, default=str, indent=2)
+        # Convert to serializable format
+        return [cluster.to_dict() for cluster in clusters.items]
 
     except ApiException as e:
         raise ResourceError(f"Kubernetes API error: {e.reason}")
@@ -137,7 +138,7 @@ def list_clusters() -> str:
 
 
 @mcp.resource("talm://policies")
-def list_policies() -> str:
+def list_policies() -> List[Dict[str, Any]]:
     """List all policies bound to managed clusters"""
     try:
         ctx = get_ctx_or_raise()
@@ -148,7 +149,8 @@ def list_policies() -> str:
         )
 
         policies = policy_api.get()
-        return json.dumps(policies.items, default=str, indent=2)
+        # Convert to serializable format
+        return [policy.to_dict() for policy in policies.items]
 
     except ApiException as e:
         raise ResourceError(f"Kubernetes API error: {e.reason}")
@@ -158,7 +160,7 @@ def list_policies() -> str:
 
 
 @mcp.resource("talm://clusters/{cluster_name}/status")
-def get_cluster_status(cluster_name: str) -> str:
+def get_cluster_status(cluster_name: str) -> Dict[str, Any]:
     """Get detailed status for a specific cluster"""
     try:
         ctx = get_ctx_or_raise()
@@ -183,11 +185,11 @@ def get_cluster_status(cluster_name: str) -> str:
             logger.warning(f"Could not fetch CGUs: {e}")
 
         result = {
-            "cluster": cluster,
-            "cgus": cluster_cgus
+            "cluster": cluster.to_dict(),
+            "cgus": [cgu.to_dict() for cgu in cluster_cgus]
         }
 
-        return json.dumps(result, default=str, indent=2)
+        return result
 
     except ApiException as e:
         if e.status == 404:
@@ -318,19 +320,17 @@ def remediate_cluster(cluster_name: str) -> str:
 
 
 @mcp.tool()
-def check_cluster_health(cluster_name: str) -> str:
+def check_cluster_health(cluster_name: str) -> Dict[str, Any]:
     """Analyze the health status of a specific managed cluster.
     
     Args:
         cluster_name: Name of the ManagedCluster to check
         
     Returns:
-        JSON string with cluster and CGU data for AI analysis
+        Dictionary with cluster and CGU data for AI analysis
     """
     try:
-        ctx, error = get_ctx_or_error()
-        if error:
-            return error
+        ctx = get_ctx_or_raise()
 
         managed_cluster_api = ctx.dynamic_client.resources.get(
             api_version="cluster.open-cluster-management.io/v1",
@@ -341,7 +341,7 @@ def check_cluster_health(cluster_name: str) -> str:
             cluster = managed_cluster_api.get(name=cluster_name)
         except ApiException as e:
             if e.status == 404:
-                return json.dumps({"error": f"Cluster {cluster_name} not found"})
+                raise ToolError(f"Cluster {cluster_name} not found")
             raise
 
         # Get associated CGUs
@@ -356,27 +356,25 @@ def check_cluster_health(cluster_name: str) -> str:
         except Exception as e:
             logger.warning(f"Could not fetch CGUs for health check: {e}")
 
-        return json.dumps({
-            "cluster": cluster,
-            "cgus": recent_cgus
-        }, default=str, indent=2)
+        return {
+            "cluster": cluster.to_dict(),
+            "cgus": [cgu.to_dict() for cgu in recent_cgus]
+        }
 
     except Exception as e:
         logger.error(f"Failed to check cluster health: {e}")
-        return json.dumps({"error": f"Failed to check health: {str(e)}"})
+        raise ToolError(f"Failed to check health: {str(e)}")
 
 
 @mcp.tool()
-def list_active_cgus() -> str:
+def list_active_cgus() -> List[Dict[str, Any]]:
     """List all currently active ClusterGroupUpgrade operations.
     
     Returns:
-        JSON string with active CGUs for AI analysis
+        List of active CGUs for AI analysis
     """
     try:
-        ctx, error = get_ctx_or_error()
-        if error:
-            return error
+        ctx = get_ctx_or_raise()
 
         cgu_api = ctx.dynamic_client.resources.get(
             api_version="ran.openshift.io/v1alpha1",
@@ -392,11 +390,12 @@ def list_active_cgus() -> str:
             if status in ["InProgress", "Timedout", "PartiallyDone"]:
                 active_cgus.append(cgu)
 
-        return json.dumps(active_cgus, default=str, indent=2)
+        # Convert to serializable format
+        return [cgu.to_dict() for cgu in active_cgus]
 
     except Exception as e:
         logger.error(f"Failed to list active CGUs: {e}")
-        return json.dumps({"error": f"Failed to list active CGUs: {str(e)}"})
+        raise ToolError(f"Failed to list active CGUs: {str(e)}")
 
 
 # ================================
