@@ -23,6 +23,17 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+def get_ctx_or_error():
+    """Get TALM context or return offline error"""
+    ctx = mcp.get_context().request_context.lifespan_context
+    if ctx.dynamic_client is None:
+        return None, json.dumps({
+            "error": "No cluster connection available",
+            "message": "Server started in offline mode - check your kubeconfig and cluster connectivity"
+        })
+    return ctx, None
+
+
 @dataclass
 class TALMContext:
     """Shared context for TALM operations"""
@@ -107,55 +118,17 @@ mcp = FastMCP("TALM MCP Server", lifespan=talm_lifespan)
 def list_clusters() -> str:
     """List all managed clusters in ACM"""
     try:
-        ctx = mcp.get_context().request_context.lifespan_context
+        ctx, error = get_ctx_or_error()
+        if error:
+            return error
 
-        if ctx.dynamic_client is None:
-            return json.dumps({
-                "error": "No cluster connection available",
-                "message": "Server started in offline mode - check your kubeconfig and cluster connectivity"
-            })
-
-        # Get ManagedCluster CRDs (v1)
         managed_cluster_api = ctx.dynamic_client.resources.get(
             api_version="cluster.open-cluster-management.io/v1",
             kind="ManagedCluster"
         )
 
         clusters = managed_cluster_api.get()
-
-        result = []
-        for cluster in clusters.items:
-            # Extract basic info from CRD structure
-            name = cluster.metadata.name
-            created = cluster.metadata.creationTimestamp
-            labels = dict(cluster.metadata.labels or {})
-            hub_accepted = cluster.spec.get("hubAcceptsClient", False)
-
-            # Check availability from conditions
-            status = "Unknown"
-            for condition in cluster.status.get("conditions", []):
-                if condition["type"] == "ManagedClusterConditionAvailable":
-                    status = "Available" if condition["status"] == "True" else "Unavailable"
-                    break
-
-            # Get resource info
-            allocatable = cluster.status.get("allocatable", {})
-            cpu_capacity = allocatable.get("cpu", "Unknown")
-
-            # Get Kubernetes version
-            k8s_version = cluster.status.get("version", {}).get("kubernetes", "Unknown")
-
-            result.append({
-                "name": name,
-                "status": status,
-                "labels": labels,
-                "created": created.isoformat() if hasattr(created, 'isoformat') else str(created),
-                "cpu_capacity": cpu_capacity,
-                "kubernetes_version": k8s_version,
-                "hub_accepted": hub_accepted
-            })
-
-        return json.dumps(result, indent=2)
+        return json.dumps(clusters.items, default=str, indent=2)
 
     except Exception as e:
         logger.error(f"Failed to list clusters: {e}")
@@ -166,46 +139,17 @@ def list_clusters() -> str:
 def list_policies() -> str:
     """List all policies bound to managed clusters"""
     try:
-        ctx = mcp.get_context().request_context.lifespan_context
+        ctx, error = get_ctx_or_error()
+        if error:
+            return error
 
-        if ctx.dynamic_client is None:
-            return json.dumps({
-                "error": "No cluster connection available",
-                "message": "Server started in offline mode - check your kubeconfig and cluster connectivity"
-            })
-
-        # Get Policy CRDs (v1)
         policy_api = ctx.dynamic_client.resources.get(
             api_version="policy.open-cluster-management.io/v1",
             kind="Policy"
         )
 
         policies = policy_api.get()
-
-        result = []
-        for policy in policies.items:
-            # Extract basic info from CRD structure
-            name = policy.metadata.name
-            namespace = policy.metadata.namespace
-            created = policy.metadata.creationTimestamp
-
-            # Get compliance status
-            compliance_state = "Unknown"
-            if hasattr(policy, 'status') and policy.status:
-                compliance_state = policy.status.get("compliant", "Unknown")
-
-            # Count policy templates
-            templates_count = len(policy.spec.get("policy-templates", []))
-
-            result.append({
-                "name": name,
-                "namespace": namespace,
-                "compliance": compliance_state,
-                "templates": templates_count,
-                "created": created.isoformat() if hasattr(created, 'isoformat') else str(created)
-            })
-
-        return json.dumps(result, indent=2)
+        return json.dumps(policies.items, default=str, indent=2)
 
     except Exception as e:
         logger.error(f"Failed to list policies: {e}")
@@ -216,15 +160,10 @@ def list_policies() -> str:
 def get_cluster_status(cluster_name: str) -> str:
     """Get detailed status for a specific cluster"""
     try:
-        ctx = mcp.get_context().request_context.lifespan_context
+        ctx, error = get_ctx_or_error()
+        if error:
+            return error
 
-        if ctx.dynamic_client is None:
-            return json.dumps({
-                "error": "No cluster connection available",
-                "message": "Server started in offline mode - check your kubeconfig and cluster connectivity"
-            })
-
-        # Get specific ManagedCluster (v1)
         managed_cluster_api = ctx.dynamic_client.resources.get(
             api_version="cluster.open-cluster-management.io/v1",
             kind="ManagedCluster"
@@ -232,18 +171,7 @@ def get_cluster_status(cluster_name: str) -> str:
 
         cluster = managed_cluster_api.get(name=cluster_name)
 
-        # Extract conditions with proper structure
-        conditions = []
-        for condition in cluster.status.get("conditions", []):
-            conditions.append({
-                "type": condition["type"],
-                "status": condition["status"],
-                "reason": condition.get("reason", ""),
-                "message": condition.get("message", ""),
-                "lastTransitionTime": condition.get("lastTransitionTime", "")
-            })
-
-        # Get associated CGUs (v1alpha1)
+        # Get associated CGUs
         cluster_cgus = []
         try:
             cgu_api = ctx.dynamic_client.resources.get(
@@ -251,39 +179,16 @@ def get_cluster_status(cluster_name: str) -> str:
                 kind="ClusterGroupUpgrade"
             )
             cgus = cgu_api.get()
-
-            for cgu in cgus.items:
-                # Check if this cluster is in the CGU
-                if cluster_name in cgu.spec.get("clusters", []):
-                    cgu_status = cgu.status.get("status", {})
-                    cluster_cgus.append({
-                        "name": cgu.metadata.name,
-                        "namespace": cgu.metadata.namespace,
-                        "status": cgu_status.get("status", "Unknown"),
-                        "current_batch": cgu_status.get("currentBatch", 0),
-                        "started_at": cgu_status.get("startedAt", ""),
-                        "enable": cgu.spec.get("enable", False)
-                    })
+            cluster_cgus = [cgu for cgu in cgus.items if cluster_name in cgu.spec.get("clusters", [])]
         except Exception as e:
             logger.warning(f"Could not fetch CGUs: {e}")
 
         result = {
-            "cluster": {
-                "name": cluster.metadata.name,
-                "created": cluster.metadata.creationTimestamp.isoformat() if hasattr(cluster.metadata.creationTimestamp,
-                                                                                     'isoformat') else str(
-                    cluster.metadata.creationTimestamp),
-                "labels": dict(cluster.metadata.labels or {}),
-                "hub_accepted": cluster.spec.get("hubAcceptsClient", False),
-                "conditions": conditions,
-                "capacity": cluster.status.get("capacity", {}),
-                "allocatable": cluster.status.get("allocatable", {}),
-                "version": cluster.status.get("version", {})
-            },
+            "cluster": cluster,
             "cgus": cluster_cgus
         }
 
-        return json.dumps(result, indent=2)
+        return json.dumps(result, default=str, indent=2)
 
     except ApiException as e:
         if e.status == 404:
@@ -349,14 +254,9 @@ def remediate_cluster(cluster_name: str) -> str:
         JSON string with remediation status, CGU name, and monitoring information
     """
     try:
-        ctx = mcp.get_context().request_context.lifespan_context
-
-        if ctx.dynamic_client is None:
-            return json.dumps({
-                "success": False,
-                "error": "No cluster connection available",
-                "message": "Check your kubeconfig and cluster connectivity"
-            })
+        ctx, error = get_ctx_or_error()
+        if error:
+            return json.dumps({"success": False, **json.loads(error)})
 
         # Check if cluster exists (v1)
         managed_cluster_api = ctx.dynamic_client.resources.get(
@@ -431,27 +331,17 @@ def remediate_cluster(cluster_name: str) -> str:
 def check_cluster_health(cluster_name: str) -> str:
     """Analyze the health status of a specific managed cluster.
     
-    Examines cluster conditions, recent operations, and provides a comprehensive
-    health assessment including any issues that need attention.
-    
     Args:
         cluster_name: Name of the ManagedCluster to check
         
     Returns:
-        JSON string with health status, issues, Kubernetes version, and recent CGU operations
+        JSON string with cluster and CGU data for AI analysis
     """
     try:
-        ctx = mcp.get_context().request_context.lifespan_context
+        ctx, error = get_ctx_or_error()
+        if error:
+            return error
 
-        if ctx.dynamic_client is None:
-            return json.dumps({
-                "cluster_name": cluster_name,
-                "health_status": "unknown",
-                "error": "No cluster connection available",
-                "message": "Check your kubeconfig and cluster connectivity"
-            })
-
-        # Get cluster info (v1)
         managed_cluster_api = ctx.dynamic_client.resources.get(
             api_version="cluster.open-cluster-management.io/v1",
             kind="ManagedCluster"
@@ -461,37 +351,10 @@ def check_cluster_health(cluster_name: str) -> str:
             cluster = managed_cluster_api.get(name=cluster_name)
         except ApiException as e:
             if e.status == 404:
-                return json.dumps({
-                    "cluster_name": cluster_name,
-                    "health_status": "not_found",
-                    "error": "Cluster not found"
-                })
+                return json.dumps({"error": f"Cluster {cluster_name} not found"})
             raise
 
-        # Analyze conditions systematically
-        health_status = "healthy"
-        issues = []
-
-        for condition in cluster.status.get("conditions", []):
-            if condition["type"] == "ManagedClusterConditionAvailable":
-                if condition["status"] != "True":
-                    health_status = "unhealthy"
-                    issues.append({
-                        "type": "availability",
-                        "reason": condition.get("reason", ""),
-                        "message": condition.get("message", "Unknown reason")
-                    })
-            elif condition["type"] == "ManagedClusterJoined":
-                if condition["status"] != "True":
-                    if health_status == "healthy":
-                        health_status = "warning"
-                    issues.append({
-                        "type": "join_status",
-                        "reason": condition.get("reason", ""),
-                        "message": condition.get("message", "Unknown reason")
-                    })
-
-        # Check for recent CGUs
+        # Get associated CGUs
         recent_cgus = []
         try:
             cgu_api = ctx.dynamic_client.resources.get(
@@ -499,106 +362,51 @@ def check_cluster_health(cluster_name: str) -> str:
                 kind="ClusterGroupUpgrade"
             )
             cgus = cgu_api.get()
-
-            # Find CGUs that include this cluster
-            for cgu in cgus.items:
-                if cluster_name in cgu.spec.get("clusters", []):
-                    recent_cgus.append({
-                        "name": cgu.metadata.name,
-                        "status": cgu.status.get("status", {}).get("status", "Unknown"),
-                        "enable": cgu.spec.get("enable", False),
-                        "created": cgu.metadata.creationTimestamp.isoformat() if hasattr(cgu.metadata.creationTimestamp,
-                                                                                         'isoformat') else str(
-                            cgu.metadata.creationTimestamp)
-                    })
-
-            # Sort by creation time (most recent first)
-            recent_cgus.sort(key=lambda x: x["created"], reverse=True)
-            recent_cgus = recent_cgus[:3]  # Last 3 CGUs
-
+            recent_cgus = [cgu for cgu in cgus.items if cluster_name in cgu.spec.get("clusters", [])]
         except Exception as e:
             logger.warning(f"Could not fetch CGUs for health check: {e}")
 
         return json.dumps({
-            "cluster_name": cluster_name,
-            "health_status": health_status,
-            "hub_accepted": cluster.spec.get("hubAcceptsClient", False),
-            "kubernetes_version": cluster.status.get("version", {}).get("kubernetes", "Unknown"),
-            "issues": issues,
-            "recent_operations": recent_cgus
-        })
+            "cluster": cluster,
+            "cgus": recent_cgus
+        }, default=str, indent=2)
 
     except Exception as e:
         logger.error(f"Failed to check cluster health: {e}")
-        return json.dumps({
-            "cluster_name": cluster_name,
-            "health_status": "error",
-            "error": f"Failed to check health: {str(e)}"
-        })
+        return json.dumps({"error": f"Failed to check health: {str(e)}"})
 
 
 @mcp.tool()
 def list_active_cgus() -> str:
     """List all currently active ClusterGroupUpgrade operations.
     
-    Returns ClusterGroupUpgrades that are in progress, timed out, or partially done.
-    Useful for monitoring ongoing TALM operations across the cluster fleet.
-    
     Returns:
-        JSON string with active CGUs, their status, target clusters, and configuration
+        JSON string with active CGUs for AI analysis
     """
     try:
-        ctx = mcp.get_context().request_context.lifespan_context
+        ctx, error = get_ctx_or_error()
+        if error:
+            return error
 
-        if ctx.dynamic_client is None:
-            return json.dumps({
-                "active_cgus": [],
-                "error": "No cluster connection available",
-                "message": "Check your kubeconfig and cluster connectivity"
-            })
-
-        # Get CGUs (v1alpha1)
         cgu_api = ctx.dynamic_client.resources.get(
             api_version="ran.openshift.io/v1alpha1",
             kind="ClusterGroupUpgrade"
         )
 
         cgus = cgu_api.get()
-
+        
+        # Filter for active CGUs
         active_cgus = []
         for cgu in cgus.items:
-            # Check status from the status field
-            cgu_status = cgu.status.get("status", {})
-            status = cgu_status.get("status", "Unknown")
-
-            # Only include active statuses
+            status = cgu.status.get("status", {}).get("status", "Unknown")
             if status in ["InProgress", "Timedout", "PartiallyDone"]:
-                active_cgus.append({
-                    "name": cgu.metadata.name,
-                    "namespace": cgu.metadata.namespace,
-                    "clusters": cgu.spec.get("clusters", []),
-                    "status": status,
-                    "current_batch": cgu_status.get("currentBatch", 0),
-                    "max_concurrency": cgu.spec.get("remediationStrategy", {}).get("maxConcurrency", 1),
-                    "timeout": cgu.spec.get("remediationStrategy", {}).get("timeout", 240),
-                    "enable": cgu.spec.get("enable", False),
-                    "created": cgu.metadata.creationTimestamp.isoformat() if hasattr(cgu.metadata.creationTimestamp,
-                                                                                     'isoformat') else str(
-                        cgu.metadata.creationTimestamp),
-                    "managed_policies": cgu.spec.get("managedPolicies", [])
-                })
+                active_cgus.append(cgu)
 
-        return json.dumps({
-            "active_cgus": active_cgus,
-            "count": len(active_cgus)
-        })
+        return json.dumps(active_cgus, default=str, indent=2)
 
     except Exception as e:
         logger.error(f"Failed to list active CGUs: {e}")
-        return json.dumps({
-            "active_cgus": [],
-            "error": f"Failed to list active CGUs: {str(e)}"
-        })
+        return json.dumps({"error": f"Failed to list active CGUs: {str(e)}"})
 
 
 # ================================
