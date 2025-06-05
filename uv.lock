@@ -240,7 +240,7 @@ cli = [
 ]
 
 [[package]]
-name = "mcp-talm-poc"
+name = "mcp-ran-poc"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

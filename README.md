@@ -1,4 +1,4 @@
-# mcp-talm-poc
+# mcp-ran-poc
 
 **⚠️ WARNING: THIS IS A PROOF OF CONCEPT (POC) - NOT FOR PRODUCTION USE ⚠️**
 
@@ -28,7 +28,7 @@ Add these configurations to your MCP client (e.g., Claude Desktop config at `~/L
     "run", 
     "python", "servers/talm.py"
    ],
-   "cwd": "/path/to/mcp-talm-poc",
+   "cwd": "/path/to/mcp-ran-poc",
    "env": {
       "KUBECONFIG": "/path/to/your/kubeconfig.yaml"
    }
@@ -47,7 +47,7 @@ Add these configurations to your MCP client (e.g., Claude Desktop config at `~/L
     "run", 
     "python", "servers/ocloud-pg.py"
    ],
-   "cwd": "/path/to/mcp-talm-poc",
+   "cwd": "/path/to/mcp-ran-poc",
    "env": {
       "POSTGRES_HOST": "localhost",
       "POSTGRES_PORT": "5432",
@@ -70,7 +70,7 @@ This format has been tested and works:
    "command": "/path/to/uv",
    "args": [
     "run", 
-    "--directory", "/path/to/mcp-talm-poc/servers",
+    "--directory", "/path/to/mcp-ran-poc/servers",
     "python", "talm.py"
    ],
    "env": {
@@ -81,7 +81,7 @@ This format has been tested and works:
    "command": "/path/to/uv",
    "args": [
     "run", 
-    "--directory", "/path/to/mcp-talm-poc/servers",
+    "--directory", "/path/to/mcp-ran-poc/servers",
     "python", "ocloud-pg.py"
    ],
    "env": {
@@ -97,7 +97,7 @@ This format has been tested and works:
 ```
 
 Replace:
-- `/path/to/mcp-talm-poc` with this repository's absolute path
+- `/path/to/mcp-ran-poc` with this repository's absolute path
 - `/path/to/your/kubeconfig.yaml` with your cluster's kubeconfig file
 - PostgreSQL environment variables with your actual database credentials
 
