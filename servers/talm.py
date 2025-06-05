@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 TALM MCP Server - Topology Aware Lifecycle Manager for Red Hat ACM
 A Model Context Protocol server for managing cluster lifecycle operations.
