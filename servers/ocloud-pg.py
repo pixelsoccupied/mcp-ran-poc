@@ -9,7 +9,6 @@ import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Dict, Optional
 
 import asyncpg
 from mcp.server.fastmcp import FastMCP
@@ -23,7 +22,8 @@ logger = logging.getLogger(__name__)
 @dataclass
 class PostgresContext:
     """Shared context for PostgreSQL operations"""
-    connections: Optional[Dict[str, asyncpg.Connection]] = None
+
+    connections: dict[str, asyncpg.Connection] | None = None
 
 
 @asynccontextmanager
@@ -38,7 +38,7 @@ async def postgres_lifespan(server: FastMCP) -> AsyncIterator[PostgresContext]:
             "port": int(os.getenv("POSTGRES_PORT", 5432)),
             "database": os.getenv("POSTGRES_DB", "postgres"),
             "user": os.getenv("POSTGRES_USER", "postgres"),
-            "password": os.getenv("POSTGRES_PASSWORD", "password")
+            "password": os.getenv("POSTGRES_PASSWORD", "password"),
         }
     }
 
@@ -104,7 +104,9 @@ async def execute_query(database: str, query: str) -> str:
         # Get connection from context
         ctx = mcp.get_context()
         lifespan_ctx = ctx.request_context.lifespan_context
-        assert isinstance(lifespan_ctx, PostgresContext), "Invalid lifespan context type"
+        assert isinstance(lifespan_ctx, PostgresContext), (
+            "Invalid lifespan context type"
+        )
 
         if not lifespan_ctx.connections:
             raise ToolError("No database connections available")
@@ -121,20 +123,26 @@ async def execute_query(database: str, query: str) -> str:
         # Convert to list of dicts
         results = [dict(row) for row in rows] if rows else []
 
-        return json.dumps({
-            "success": True,
-            "query": query,
-            "result": results,
-            "count": len(results),
-            "columns": list(results[0].keys()) if results else [],
-            "message": "Query executed successfully" if results else "Query executed successfully, no rows returned"
-        }, indent=2, default=str)
+        return json.dumps(
+            {
+                "success": True,
+                "query": query,
+                "result": results,
+                "count": len(results),
+                "columns": list(results[0].keys()) if results else [],
+                "message": "Query executed successfully"
+                if results
+                else "Query executed successfully, no rows returned",
+            },
+            indent=2,
+            default=str,
+        )
 
     except asyncpg.PostgresSyntaxError as e:
-        raise ToolError(f"SQL syntax error: {str(e)}")
+        raise ToolError(f"SQL syntax error: {str(e)}") from e
     except Exception as e:
         logger.error(f"Failed to execute query: {e}")
-        raise ToolError(f"Query execution failed: {str(e)}")
+        raise ToolError(f"Query execution failed: {str(e)}") from e
 
 
 def main() -> None:
