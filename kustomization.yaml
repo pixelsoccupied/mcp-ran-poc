@@ -8,3 +8,6 @@ secretGenerator:
 - name: mcp-secrets
   envs:
   - .env
+
+generatorOptions:
+  disableNameSuffixHash: true

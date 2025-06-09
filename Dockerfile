@@ -22,7 +22,14 @@ RUN uv sync --frozen
 COPY . .
 
 # Create non-root user for security
-RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+RUN useradd -m -u 1000 appuser
+
+# Set UV cache directory and fix permissions for OpenShift
+ENV UV_CACHE_DIR=/app/.cache/uv
+RUN mkdir -p /app/.cache/uv && \
+    chgrp -R 0 /app && \
+    chmod -R g=u /app
+
 USER appuser
 
 # Expose all ports that might be used

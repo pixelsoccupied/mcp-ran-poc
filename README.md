@@ -1,33 +1,87 @@
-# mcp-ran-poc
+# MCP TALM POC
 
 **⚠️ WARNING: THIS IS A PROOF OF CONCEPT (POC) - NOT FOR PRODUCTION USE ⚠️**
 
-This repository contains two MCP (Model Context Protocol) servers and one ADK agent:
+This repository contains MCP (Model Context Protocol) servers and an ADK agent for database querying and Kubernetes cluster management:
 
-1. **TALM MCP Server** - TALM (Topology Aware Lifecycle Manager) interface
-2. **PostgreSQL MCP Server** - Natural language SQL query interface for PostgreSQL databases
-3. **ADK Agent** - Google ADK agent providing natural language interface to PostgreSQL MCP server
+1. **TALM MCP Server** - TALM (Topology Aware Lifecycle Manager) interface for Red Hat ACM
+2. **PostgreSQL MCP Server** - Natural language SQL query interface for PostgreSQL databases  
+3. **ADK Agent** - Google ADK agent providing web-based natural language interface to PostgreSQL
 
-## Quick Start
+## Deployment Options
 
-### Install Dependencies
+### Local Development
 ```bash
+# Install dependencies
 uv sync
+
+# Run PostgreSQL MCP server
+uv run python servers/ocloud-pg.py
+
+# Run ADK web interface
+cd clients && adk web
 ```
 
-## Client Options
+### OpenShift Container Platform (OCP) Deployment
 
-You can interact with the MCP servers using two different clients:
+#### Prerequisites
+- OpenShift CLI (`oc`) installed and logged in
+- Docker/Podman for building images
+- Access to a container registry (quay.io)
 
-### Option 1: Claude Desktop Client
-Configure the MCP servers in Claude Desktop config at `~/Library/Application Support/Claude/claude_desktop_config.json`:
+#### Quick Deploy
+```bash
+# 1. Setup environment variables
+cp .env.example .env
+# Edit .env with your PostgreSQL and OpenAI credentials
 
-### Option 2: Google ADK Agent
-For a natural language interface to the PostgreSQL server:
+# 2. Build and push container image
+make dev-build-push
+
+# 3. Deploy to OpenShift
+make deploy
+
+# 4. Get application URL
+oc get route mcp-app-route -n mcp-poc -o jsonpath='{.spec.host}'
+```
+
+#### Available Make Commands
+- `make build` - Build Docker image
+- `make push` - Push image to registry  
+- `make dev-build-push` - Build and push with dev tag
+- `make deploy` - Deploy to OpenShift using kustomize
+- `make undeploy` - Remove deployment from OpenShift
+
+#### Environment Configuration
+Create `.env` file with required variables:
+```bash
+# PostgreSQL Database Configuration
+POSTGRES_HOST=postgres-service.namespace.svc.cluster.local
+POSTGRES_PORT=5432
+POSTGRES_DB=your-database-name
+POSTGRES_USER=your-username
+POSTGRES_PASSWORD=your-password
+
+# OpenAI API Configuration  
+OPENAI_API_KEY=your-openai-api-key-here
+```
+
+#### Deployment Architecture
+- **Single Pod Deployment**: Both PostgreSQL MCP server and ADK web client run in the same pod
+- **Shared Networking**: ADK client connects to MCP server via localhost
+- **External Access**: Only the web interface (port 8000) is exposed via OpenShift Route
+- **Security**: TLS termination at the edge, automatic HTTPS redirect
+
+## Local Client Options
+
+### Option 1: Google ADK Web Interface (Recommended)
 ```bash
 cd clients && adk web
 ```
-Then access the web interface at `http://localhost:8000`
+Access at `http://localhost:8000` for natural language database querying
+
+### Option 2: Claude Desktop Client
+Configure MCP servers in Claude Desktop config:
 
 ## Configure Claude Desktop Client
 

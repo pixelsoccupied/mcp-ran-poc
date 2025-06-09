@@ -6,11 +6,12 @@ from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset
 from google.adk.sessions import InMemorySessionService
 from google.adk.runners import Runner
 
-# Get MCP server URL from environment, default to localhost for development
+# Get configuration from environment
 MCP_SERVER_URL = os.getenv('MCP_SERVER_URL', 'http://localhost:3000/mcp')
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
 root_agent = LlmAgent(
-    model=LiteLlm(model="openai/gpt-4o"),
+    model=LiteLlm(model="openai/gpt-4o", api_key=OPENAI_API_KEY),
     name='enterprise_assistant',
     instruction=f"""\
   You are a PostgreSQL Database Assistant that helps users query and analyze PostgreSQL databases using natural language.

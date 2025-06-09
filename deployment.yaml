@@ -26,6 +26,7 @@ spec:
       containers:
       - name: postgresql-mcp
         image: quay.io/npathan/dev:mcp-talm-poc-dev
+        imagePullPolicy: Always
         command: ["uv", "run", "python", "servers/ocloud-pg.py"]
         args: ["--transport", "streamable-http", "--port", "3000"]
         ports:
@@ -36,8 +37,9 @@ spec:
             name: mcp-secrets
       - name: adk-web
         image: quay.io/npathan/dev:mcp-talm-poc-dev
+        imagePullPolicy: Always
         command: ["sh", "-c"]
-        args: ["cd clients && adk web --host 0.0.0.0 --port 8000"]
+        args: ["cd clients && uv run adk web --host 0.0.0.0 --port 8000"]
         ports:
         - containerPort: 8000
           name: web-port
