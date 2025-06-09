@@ -6,7 +6,9 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "asyncpg>=0.30.0",
+    "google-adk>=1.2.1",
     "kubernetes>=32.0.1",
+    "litellm>=1.72.1",
     "mcp[cli]>=1.9.2",
 ]
 

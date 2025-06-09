@@ -2,10 +2,11 @@
 
 **⚠️ WARNING: THIS IS A PROOF OF CONCEPT (POC) - NOT FOR PRODUCTION USE ⚠️**
 
-This repository contains two MCP (Model Context Protocol) servers:
+This repository contains two MCP (Model Context Protocol) servers and one ADK agent:
 
 1. **TALM MCP Server** - TALM (Topology Aware Lifecycle Manager) interface
 2. **PostgreSQL MCP Server** - Natural language SQL query interface for PostgreSQL databases
+3. **ADK Agent** - Google ADK agent providing natural language interface to PostgreSQL MCP server
 
 ## Quick Start
 
@@ -14,9 +15,23 @@ This repository contains two MCP (Model Context Protocol) servers:
 uv sync
 ```
 
-### Configure MCP Client
+## Client Options
 
-Add these configurations to your MCP client (e.g., Claude Desktop config at `~/Library/Application Support/Claude/claude_desktop_config.json`):
+You can interact with the MCP servers using two different clients:
+
+### Option 1: Claude Desktop Client
+Configure the MCP servers in Claude Desktop config at `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+### Option 2: Google ADK Agent
+For a natural language interface to the PostgreSQL server:
+```bash
+cd clients && adk web
+```
+Then access the web interface at `http://localhost:8000`
+
+## Configure Claude Desktop Client
+
+Add these configurations to your Claude Desktop config:
 
 #### TALM Server Configuration
 ```json
@@ -112,3 +127,10 @@ Replace:
 - **Tools**: `execute_query(database, query)` - Execute read-only SQL queries safely
 - **Security**: Only SELECT and WITH queries allowed
 - **Response**: JSON format with query results, metadata, and executed SQL
+
+### ADK Agent
+- **Natural Language Interface**: Convert questions to SQL queries automatically
+- **Query Explanation**: Shows SQL reasoning before execution
+- **Result Analysis**: Provides insights and analysis of database results
+- **Schema Exploration**: Helps understand database structure
+- **Web Interface**: User-friendly browser-based interaction at `http://localhost:8000`

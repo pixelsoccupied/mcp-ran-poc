@@ -474,10 +474,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-    # policy from the cluster (look at a policy in ns)
-    # go look at all my cluster - for any that are not complient and go remediate
-
-    # delete the existing
-
-    # oran sql
-    # how far from vllm

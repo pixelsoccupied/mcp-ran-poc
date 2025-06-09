@@ -4,11 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This repository contains two MCP servers:
+This repository contains two MCP servers and one ADK agent:
 
 1. **TALM MCP Server** (`servers/talm.py`): A TALM (Topology Aware Lifecycle Manager) MCP Server for Red Hat Advanced Cluster Management (ACM). It provides a Model Context Protocol interface to manage Kubernetes cluster lifecycle operations through ACM's TALM framework.
 
 2. **PostgreSQL MCP Server** (`servers/ocloud-pg.py`): A natural language SQL query interface for PostgreSQL databases. Allows Claude to execute read-only SQL queries safely.
+
+3. **ADK Agent** (`clients/adk-agents/`): A Google ADK agent that provides a natural language interface to the PostgreSQL MCP server for database querying and analysis.
 
 ## Development Commands
 
@@ -28,6 +30,9 @@ uv run python servers/ocloud-pg.py
 
 # Run the PostgreSQL server with HTTP transport
 uv run python servers/ocloud-pg.py --transport streamable-http --port 8081
+
+# Run the ADK agent web interface
+cd clients && adk web
 ```
 
 ### Testing Server Functionality
@@ -48,6 +53,14 @@ uv run python servers/ocloud-pg.py --transport streamable-http --port 8081
 # - Tools: execute_query(database, query) - Execute read-only SQL queries
 # Environment variables required:
 # - POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD
+```
+
+#### ADK Agent
+```bash
+# Run the ADK agent web interface to interact with PostgreSQL MCP server
+cd clients && adk web
+# Access the web interface at http://localhost:8000
+# The agent provides natural language interface to PostgreSQL databases
 ```
 
 ## Architecture Overview
@@ -153,3 +166,39 @@ The server implements graceful degradation:
 - SQL injection protection through parameterized queries
 - Environment variable-based credential management
 - Connection pooling and proper cleanup
+
+### ADK Agent Architecture
+
+#### Core Components
+
+**LlmAgent**: The main agent class that provides natural language interface:
+- Uses OpenAI GPT-4o model via LiteLlm integration
+- Named 'enterprise_assistant' for PostgreSQL database interactions
+- Configured with specialized instruction for database querying
+
+**MCPToolset**: Integration with MCP servers:
+- Connects to PostgreSQL MCP server via HTTP transport at `http://localhost:3000/mcp`
+- Provides access to `execute_query` tool for database operations
+- Automatically handles MCP protocol communication
+
+#### ADK Agent Features
+
+- **Natural Language SQL**: Converts user questions into proper SQL queries
+- **Query Explanation**: Explains SQL reasoning before execution
+- **Result Analysis**: Provides insights and analysis of query results
+- **Schema Exploration**: Helps users understand database structure
+- **Safety First**: Only allows read-only operations through MCP validation
+
+#### Integration Architecture
+
+```
+User Input (Natural Language)
+    ↓
+ADK Agent (GPT-4o + Instructions)
+    ↓
+MCPToolset (HTTP Transport)
+    ↓
+PostgreSQL MCP Server (execute_query tool)
+    ↓
+PostgreSQL Database (Read-only queries)
+```

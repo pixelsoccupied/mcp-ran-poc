@@ -36,9 +36,9 @@ async def postgres_lifespan(server: FastMCP) -> AsyncIterator[PostgresContext]:
         "main": {
             "host": os.getenv("POSTGRES_HOST", "localhost"),
             "port": int(os.getenv("POSTGRES_PORT", 5432)),
-            "database": os.getenv("POSTGRES_DB", "postgres"),
-            "user": os.getenv("POSTGRES_USER", "postgres"),
-            "password": os.getenv("POSTGRES_PASSWORD", "password"),
+            "database": os.getenv("POSTGRES_DB", "alarms"),
+            "user": os.getenv("POSTGRES_USER", "alarms"),
+            "password": os.getenv("POSTGRES_PASSWORD", "debug"),
         }
     }
 
@@ -80,12 +80,12 @@ mcp = FastMCP("PostgreSQL MCP Server", lifespan=postgres_lifespan)
 async def execute_query(database: str, query: str) -> str:
     """Execute a read-only SQL query on a specified database.
 
-    This tool allows Claude to run SELECT queries to retrieve data, check table schemas,
+    This tool allows AI to run SELECT queries to retrieve data, check table schemas,
     list tables, or perform any read-only database operation.
 
     Args:
         database: Name of the database to query (e.g., "main")
-        query: SQL SELECT query to execute
+        query: PostgreSQL SELECT query to execute
 
     Returns:
         JSON string with query results including data, row count, and column names
@@ -93,7 +93,14 @@ async def execute_query(database: str, query: str) -> str:
     Example queries:
         - List tables: SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'
         - Show schema: SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'users'
+        - Get column comments: SELECT column_name, col_description(pgc.oid, pa.attnum) as comment
+                               FROM information_schema.columns c JOIN pg_class pgc ON pgc.relname = c.table_name
+                               JOIN pg_attribute pa ON pa.attrelid = pgc.oid AND pa.attname = c.column_name
+                               WHERE c.table_name = 'your_table'
         - Get data: SELECT * FROM customers WHERE created_at > '2024-01-01' LIMIT 10
+
+    Important: When unsure about column meanings, business logic, or attribute purposes,
+    query for database comments using col_description rather than inferring from data patterns.
     """
     try:
         # Validate query is read-only
@@ -147,7 +154,31 @@ async def execute_query(database: str, query: str) -> str:
 
 def main() -> None:
     """Main entry point for the PostgreSQL MCP Server"""
-    mcp.run()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="PG MCP Server")
+    parser.add_argument(
+        "--transport",
+        choices=["stdio", "streamable-http"],
+        default="stdio",
+        help="Transport method (default: stdio)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=3000,
+        help="Port for streamable HTTP transport (default: 8080)",
+    )
+
+    args = parser.parse_args()
+
+    if args.transport == "stdio":
+        mcp.run()
+    else:
+        # Update port setting for HTTP transport
+        mcp.settings.port = args.port
+        mcp.run(transport="streamable-http")
+
 
 
 if __name__ == "__main__":
