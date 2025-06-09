@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This repository contains two MCP servers and one ADK agent:
+This repository contains MCP servers and an ADK agent for database querying and Kubernetes cluster management:
 
 1. **TALM MCP Server** (`servers/talm.py`): A TALM (Topology Aware Lifecycle Manager) MCP Server for Red Hat Advanced Cluster Management (ACM). It provides a Model Context Protocol interface to manage Kubernetes cluster lifecycle operations through ACM's TALM framework.
 
 2. **PostgreSQL MCP Server** (`servers/ocloud-pg.py`): A natural language SQL query interface for PostgreSQL databases. Allows Claude to execute read-only SQL queries safely.
 
-3. **ADK Agent** (`clients/adk-agents/`): A Google ADK agent that provides a natural language interface to the PostgreSQL MCP server for database querying and analysis.
+3. **ADK Agent** (`clients/adk-agents/`): A Google ADK agent that provides a web-based natural language interface to the PostgreSQL MCP server for database querying and analysis.
 
 ## Development Commands
 
@@ -29,10 +29,26 @@ uv run python servers/talm.py --transport streamable-http --port 8080
 uv run python servers/ocloud-pg.py
 
 # Run the PostgreSQL server with HTTP transport
-uv run python servers/ocloud-pg.py --transport streamable-http --port 8081
+uv run python servers/ocloud-pg.py --transport streamable-http --port 3000
 
 # Run the ADK agent web interface
 cd clients && adk web
+```
+
+### Container Build and Deployment Commands
+```bash
+# Build Docker image for multiple architectures
+make build                    # Build Docker image with linux/amd64 platform
+make push                     # Push image to registry
+make dev-build-push          # Build and push with dev tag
+
+# OpenShift deployment
+make deploy                   # Deploy to OpenShift using kustomize
+make undeploy                # Remove deployment from OpenShift
+
+# Setup for deployment
+cp .env.example .env         # Copy environment template
+# Edit .env with PostgreSQL and OpenAI credentials
 ```
 
 ### Testing Server Functionality
@@ -202,3 +218,42 @@ PostgreSQL MCP Server (execute_query tool)
     ↓
 PostgreSQL Database (Read-only queries)
 ```
+
+## OpenShift Deployment Architecture
+
+### Container Strategy
+- **Unified Docker Image**: Single container image contains all components (PostgreSQL MCP server, ADK agent)
+- **Multi-platform Build**: Built for linux/amd64 to ensure compatibility with OpenShift nodes
+- **Command Override**: Different Kubernetes commands run different services from the same image
+
+### OpenShift-Specific Considerations
+- **Security Context Constraints**: Uses OpenShift's restricted-v2 SCC
+- **Non-root User**: Runs as arbitrary user ID assigned by OpenShift (member of root group)
+- **File Permissions**: Uses `chgrp -R 0 /app && chmod -R g=u /app` for proper group permissions
+- **UV Cache Directory**: Configured at `/app/.cache/uv` with group write permissions
+
+### Deployment Components
+- **Namespace**: `mcp-poc` - dedicated project for POC
+- **Single Pod**: Both containers in same pod sharing localhost networking
+- **Secret**: Generated from `.env` file using kustomize secretGenerator
+- **Service**: Exposes both ports (3000 for MCP, 8000 for web)
+- **Route**: OpenShift-specific external access with TLS termination
+
+### Environment Configuration
+Required environment variables managed via Kubernetes secret:
+- `POSTGRES_HOST`: Use Kubernetes DNS format (e.g., `postgres-service.namespace.svc.cluster.local`)
+- `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`: Database connection details
+- `OPENAI_API_KEY`: Required for LiteLlm model in ADK agent
+- `MCP_SERVER_URL`: Automatically set to `http://localhost:3000/mcp` for pod-local communication
+
+### Networking
+- **Pod-local Communication**: ADK web client connects to PostgreSQL MCP server via localhost
+- **External Access**: Only web interface (port 8000) exposed via OpenShift Route
+- **TLS**: Automatic HTTPS with edge termination and redirect from HTTP
+
+### Key Files
+- `Dockerfile`: Multi-service container with OpenShift-compatible permissions
+- `deployment.yaml`: Kubernetes manifests for all resources
+- `kustomization.yaml`: Kustomize configuration with secret generation
+- `Makefile`: Build and deployment automation
+- `.env.example`: Template for required environment variables
