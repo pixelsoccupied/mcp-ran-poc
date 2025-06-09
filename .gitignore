@@ -1,3 +1,6 @@
+# Environment files containing secrets
+.env
+
 # Python-generated files
 __pycache__/
 *.py[oc]
@@ -17,3 +20,6 @@ wheels/
 
 # Claude Code settings
 .claude/settings.local.json
+
+# Kubernetes generated files
+secret.yaml

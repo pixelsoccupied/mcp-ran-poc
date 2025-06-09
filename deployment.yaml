@@ -1,0 +1,84 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mcp-poc
+  labels:
+    app: mcp-poc
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-app
+  namespace: mcp-poc
+  labels:
+    app: mcp-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mcp-app
+  template:
+    metadata:
+      labels:
+        app: mcp-app
+    spec:
+      containers:
+      - name: postgresql-mcp
+        image: quay.io/npathan/dev:mcp-talm-poc-dev
+        command: ["uv", "run", "python", "servers/ocloud-pg.py"]
+        args: ["--transport", "streamable-http", "--port", "3000"]
+        ports:
+        - containerPort: 3000
+          name: mcp-port
+        envFrom:
+        - secretRef:
+            name: mcp-secrets
+      - name: adk-web
+        image: quay.io/npathan/dev:mcp-talm-poc-dev
+        command: ["sh", "-c"]
+        args: ["cd clients && adk web --host 0.0.0.0 --port 8000"]
+        ports:
+        - containerPort: 8000
+          name: web-port
+        env:
+        - name: MCP_SERVER_URL
+          value: "http://localhost:3000/mcp"
+        envFrom:
+        - secretRef:
+            name: mcp-secrets
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-app-service
+  namespace: mcp-poc
+  labels:
+    app: mcp-app
+spec:
+  selector:
+    app: mcp-app
+  ports:
+  - port: 8000
+    targetPort: 8000
+    name: web
+  - port: 3000
+    targetPort: 3000
+    name: mcp
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: mcp-app-route
+  namespace: mcp-poc
+  labels:
+    app: mcp-app
+spec:
+  to:
+    kind: Service
+    name: mcp-app-service
+  port:
+    targetPort: web
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

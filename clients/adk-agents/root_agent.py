@@ -1,9 +1,13 @@
+import os
 from google.adk.agents.llm_agent import LlmAgent
 from google.adk.models.lite_llm import LiteLlm
 from google.adk.tools.mcp_tool.mcp_session_manager import StreamableHTTPServerParams
 from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset
 from google.adk.sessions import InMemorySessionService
 from google.adk.runners import Runner
+
+# Get MCP server URL from environment, default to localhost for development
+MCP_SERVER_URL = os.getenv('MCP_SERVER_URL', 'http://localhost:3000/mcp')
 
 root_agent = LlmAgent(
     model=LiteLlm(model="openai/gpt-4o"),
@@ -41,7 +45,7 @@ root_agent = LlmAgent(
     tools=[
         MCPToolset(
             connection_params=StreamableHTTPServerParams(
-                url='http://localhost:3000/mcp',
+                url=MCP_SERVER_URL,
             ),
         )
     ],
@@ -75,6 +79,3 @@ async def setup_agent_with_memory():
     print(f"Runner created for agent '{runner.agent.name}' with memory capabilities.")
     
     return runner, session
-
-# Export the setup function for use
-__all__ = ['root_agent', 'setup_agent_with_memory', 'session_service', 'APP_NAME', 'USER_ID', 'SESSION_ID']
