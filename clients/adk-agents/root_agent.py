@@ -1,10 +1,11 @@
 import os
+
 from google.adk.agents.llm_agent import LlmAgent
 from google.adk.models.lite_llm import LiteLlm
+from google.adk.runners import Runner
+from google.adk.sessions import InMemorySessionService
 from google.adk.tools.mcp_tool.mcp_session_manager import StreamableHTTPServerParams
 from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset
-from google.adk.sessions import InMemorySessionService
-from google.adk.runners import Runner
 
 # Get configuration from environment
 MCP_SERVER_URL = os.getenv('MCP_SERVER_URL', 'http://localhost:3000/mcp')
@@ -13,9 +14,9 @@ OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 root_agent = LlmAgent(
     model=LiteLlm(model="openai/gpt-4o", api_key=OPENAI_API_KEY),
     name='enterprise_assistant',
-    instruction=f"""\
+    instruction="""\
   You are a PostgreSQL Database Assistant that helps users query and analyze PostgreSQL databases using natural language.
-  
+
   You have persistent memory across conversations within a session. Use this to:
   - Remember previous queries and their results
   - Build on previous conversations and context
@@ -78,5 +79,5 @@ async def setup_agent_with_memory():
         session_service=session_service  # Uses our session manager for memory
     )
     print(f"Runner created for agent '{runner.agent.name}' with memory capabilities.")
-    
+
     return runner, session
