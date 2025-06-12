@@ -8,6 +8,29 @@ This repository contains MCP (Model Context Protocol) servers and an ADK agent f
 2. **PostgreSQL MCP Server** - Natural language SQL query interface for PostgreSQL databases  
 3. **ADK Agent** - Google ADK agent providing unified web-based natural language interface to both MCP servers
 
+## Architecture Overview
+
+```
+┌─────────────────────┐    ┌─────────────────────┐    ┌─────────────────────┐
+│   Web Browser       │    │   Claude Desktop    │    │   Other MCP         │
+│   + ADK Agent       │    │      Client         │    │    Clients          │
+│     :8000           │    │                     │    │                     │
+└─────────┬───────────┘    └─────────┬───────────┘    └─────────┬───────────┘
+          │                          │                          │
+          └──────────────┬───────────┴────────────┬─────────────┘
+                         │                        │
+                         ▼                        ▼
+          ┌─────────────────────────┐   ┌─────────────────────────────────┐
+          │   PostgreSQL MCP        │   │      TALM MCP Server          │
+          │     Server :3000        │   │        :3001                  │
+          └─────────┬───────────────┘   └─────────┬───────────────────────┘
+                    │                             │
+                    ▼                             ▼
+          ┌─────────────────────────┐   ┌─────────────────────────────────┐
+          │   PostgreSQL Database   │   │     Kubernetes Clusters        │
+          └─────────────────────────┘   └─────────────────────────────────┘
+```
+
 ## Deployment Options
 
 ### Local Development
