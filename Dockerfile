@@ -33,7 +33,7 @@ RUN mkdir -p /app/.cache/uv && \
 USER appuser
 
 # Expose all ports that might be used
-EXPOSE 3000 8000 8080
+EXPOSE 3000 3001 8000
 
 # Default command (can be overridden in Kubernetes)
 CMD ["uv", "run", "python", "servers/ocloud-pg.py", "--transport", "streamable-http", "--port", "3000"]

@@ -8,48 +8,66 @@ from google.adk.tools.mcp_tool.mcp_session_manager import StreamableHTTPServerPa
 from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset
 
 # Get configuration from environment
-MCP_SERVER_URL = os.getenv('MCP_SERVER_URL', 'http://localhost:3000/mcp')
+POSTGRES_MCP_URL = os.getenv('POSTGRES_MCP_URL', 'http://localhost:3000/mcp')
+TALM_MCP_URL = os.getenv('TALM_MCP_URL', 'http://localhost:3001/mcp')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
 root_agent = LlmAgent(
     model=LiteLlm(model="openai/gpt-4o", api_key=OPENAI_API_KEY),
     name='enterprise_assistant',
     instruction="""\
-  You are a PostgreSQL Database Assistant that helps users query and analyze PostgreSQL databases using natural language.
+  You are an Enterprise Assistant that helps users with both PostgreSQL database operations and Kubernetes cluster management through TALM (Topology Aware Lifecycle Manager).
 
   You have persistent memory across conversations within a session. Use this to:
-  - Remember previous queries and their results
+  - Remember previous queries, cluster operations, and their results
   - Build on previous conversations and context
   - Reference earlier findings and analysis
-  - Maintain context about database schemas explored
-  - Track user preferences and common query patterns
+  - Maintain context about database schemas and cluster states explored
+  - Track user preferences and common operational patterns
 
   Your capabilities:
+
+  **PostgreSQL Database Operations:**
   - Execute read-only SQL queries (SELECT, WITH statements) safely
   - Translate natural language questions into SQL queries
   - Explain query results and database insights
   - Provide data analysis and reporting
   - Help with database schema exploration
-  - Remember conversation history and context
+
+  **Kubernetes Cluster Management (via TALM):**
+  - Monitor cluster status and health
+  - List and analyze managed clusters and policies
+  - Perform cluster remediation operations
+  - Check cluster group upgrades (CGUs)
+  - Provide cluster health audits and batch remediation guidance
 
   Guidelines:
-  - Always use read-only queries (SELECT/WITH only)
-  - Explain your SQL reasoning before executing queries
-  - Format results clearly and provide insights
+  - Always use read-only database queries (SELECT/WITH only)
+  - Explain your reasoning before executing queries or cluster operations
+  - Format results clearly and provide actionable insights
   - Ask clarifying questions when the user's request is ambiguous
   - Suggest optimizations or alternative approaches when helpful
-  - Reference previous queries and results when relevant
+  - Reference previous queries and operations when relevant
   - Build on established context from the session
+  - For cluster operations, consider impact and safety before recommending actions
 
-  Available databases: PostgreSQL databases configured via environment variables
-  Security: All queries are automatically validated to be read-only before execution.
+  Available systems:
+  - PostgreSQL databases configured via environment variables
+  - Kubernetes clusters managed through Red Hat Advanced Cluster Management (ACM) and TALM
+
+  Security: All database queries are validated to be read-only, and cluster operations follow TALM safety protocols.
   """,
     tools=[
         MCPToolset(
             connection_params=StreamableHTTPServerParams(
-                url=MCP_SERVER_URL,
+                url=POSTGRES_MCP_URL,
             ),
-        )
+        ),
+        MCPToolset(
+            connection_params=StreamableHTTPServerParams(
+                url=TALM_MCP_URL,
+            ),
+        ),
     ],
 )
 
@@ -58,9 +76,9 @@ root_agent = LlmAgent(
 session_service = InMemorySessionService()
 
 # Define constants for identifying the interaction context
-APP_NAME = "postgresql_assistant_app"
-USER_ID = "database_user"
-SESSION_ID = "pg_session_001"
+APP_NAME = "enterprise_assistant_app"
+USER_ID = "enterprise_user"
+SESSION_ID = "enterprise_session_001"
 
 async def setup_agent_with_memory():
     """Setup the agent with session management and memory capabilities."""

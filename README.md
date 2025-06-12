@@ -6,7 +6,7 @@ This repository contains MCP (Model Context Protocol) servers and an ADK agent f
 
 1. **TALM MCP Server** - TALM (Topology Aware Lifecycle Manager) interface for Red Hat ACM
 2. **PostgreSQL MCP Server** - Natural language SQL query interface for PostgreSQL databases  
-3. **ADK Agent** - Google ADK agent providing web-based natural language interface to PostgreSQL
+3. **ADK Agent** - Google ADK agent providing unified web-based natural language interface to both MCP servers
 
 ## Deployment Options
 
@@ -15,10 +15,13 @@ This repository contains MCP (Model Context Protocol) servers and an ADK agent f
 # Install dependencies
 uv sync
 
-# Run PostgreSQL MCP server
-uv run python servers/ocloud-pg.py
+# Run PostgreSQL MCP server (port 3000)
+uv run python servers/ocloud-pg.py --transport streamable-http --port 3000
 
-# Run ADK web interface
+# Run TALM MCP server (port 3001) 
+uv run python servers/talm.py --transport streamable-http --port 3001
+
+# Run ADK web interface (connects to both servers)
 cd clients && adk web
 ```
 
@@ -64,13 +67,21 @@ POSTGRES_PASSWORD=your-password
 
 # OpenAI API Configuration  
 OPENAI_API_KEY=your-openai-api-key-here
+
+# MCP Server URLs (automatically configured in deployment)
+POSTGRES_MCP_URL=http://localhost:3000/mcp
+TALM_MCP_URL=http://localhost:3001/mcp
 ```
 
 #### Deployment Architecture
-- **Single Pod Deployment**: Both PostgreSQL MCP server and ADK web client run in the same pod
-- **Shared Networking**: ADK client connects to MCP server via localhost
+- **Single Pod Deployment**: Three containers run in the same pod:
+  - PostgreSQL MCP server (port 3000)
+  - TALM MCP server (port 3001)  
+  - ADK web interface (port 8000)
+- **Shared Networking**: ADK client connects to both MCP servers via localhost
 - **External Access**: Only the web interface (port 8000) is exposed via OpenShift Route
 - **Security**: TLS termination at the edge, automatic HTTPS redirect
+- **RBAC**: Uses dedicated ServiceAccount with admin ClusterRole for TALM operations
 
 ## Local Client Options
 
@@ -78,7 +89,9 @@ OPENAI_API_KEY=your-openai-api-key-here
 ```bash
 cd clients && adk web
 ```
-Access at `http://localhost:8000` for natural language database querying
+Access at `http://localhost:8000` for unified natural language interface to both:
+- PostgreSQL database querying and analysis
+- Kubernetes cluster management via TALM
 
 ### Option 2: Claude Desktop Client
 Configure MCP servers in Claude Desktop config:
@@ -183,8 +196,11 @@ Replace:
 - **Response**: JSON format with query results, metadata, and executed SQL
 
 ### ADK Agent
-- **Natural Language Interface**: Convert questions to SQL queries automatically
+- **Unified Natural Language Interface**: Handles both database and cluster operations
+- **Database Operations**: Convert questions to SQL queries automatically
+- **Cluster Operations**: Manage Kubernetes clusters via TALM commands
 - **Query Explanation**: Shows SQL reasoning before execution
-- **Result Analysis**: Provides insights and analysis of database results
-- **Schema Exploration**: Helps understand database structure
+- **Result Analysis**: Provides insights and analysis of both database and cluster data
+- **Schema Exploration**: Helps understand database structure and cluster topology
 - **Web Interface**: User-friendly browser-based interaction at `http://localhost:8000`
+- **Dual MCP Integration**: Seamlessly connects to both PostgreSQL and TALM MCP servers

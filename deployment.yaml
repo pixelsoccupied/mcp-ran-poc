@@ -6,6 +6,29 @@ metadata:
   labels:
     app: mcp-poc
 ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: talm-mcp-sa
+  namespace: mcp-poc
+  labels:
+    app: mcp-app
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: talm-mcp-admin-binding
+  labels:
+    app: mcp-app
+subjects:
+- kind: ServiceAccount
+  name: talm-mcp-sa
+  namespace: mcp-poc
+roleRef:
+  kind: ClusterRole
+  name: admin
+  apiGroup: rbac.authorization.k8s.io
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -23,6 +46,7 @@ spec:
       labels:
         app: mcp-app
     spec:
+      serviceAccountName: talm-mcp-sa
       containers:
       - name: postgresql-mcp
         image: quay.io/npathan/dev:mcp-talm-poc-dev
@@ -31,7 +55,18 @@ spec:
         args: ["--transport", "streamable-http", "--port", "3000"]
         ports:
         - containerPort: 3000
-          name: mcp-port
+          name: pg-mcp-port
+        envFrom:
+        - secretRef:
+            name: mcp-secrets
+      - name: talm-mcp
+        image: quay.io/npathan/dev:mcp-talm-poc-dev
+        imagePullPolicy: Always
+        command: ["uv", "run", "python", "servers/talm.py"]
+        args: ["--transport", "streamable-http", "--port", "3001"]
+        ports:
+        - containerPort: 3001
+          name: talm-mcp-port
         envFrom:
         - secretRef:
             name: mcp-secrets
@@ -44,8 +79,10 @@ spec:
         - containerPort: 8000
           name: web-port
         env:
-        - name: MCP_SERVER_URL
+        - name: POSTGRES_MCP_URL
           value: "http://localhost:3000/mcp"
+        - name: TALM_MCP_URL
+          value: "http://localhost:3001/mcp"
         envFrom:
         - secretRef:
             name: mcp-secrets
@@ -66,7 +103,10 @@ spec:
     name: web
   - port: 3000
     targetPort: 3000
-    name: mcp
+    name: pg-mcp
+  - port: 3001
+    targetPort: 3001
+    name: talm-mcp
 ---
 apiVersion: route.openshift.io/v1
 kind: Route

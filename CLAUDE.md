@@ -23,7 +23,7 @@ uv sync
 uv run python servers/talm.py
 
 # Run the TALM server with HTTP transport
-uv run python servers/talm.py --transport streamable-http --port 8080
+uv run python servers/talm.py --transport streamable-http --port 3001
 
 # Run the PostgreSQL server in stdio mode
 uv run python servers/ocloud-pg.py
@@ -189,21 +189,33 @@ The server implements graceful degradation:
 
 **LlmAgent**: The main agent class that provides natural language interface:
 - Uses OpenAI GPT-4o model via LiteLlm integration
-- Named 'enterprise_assistant' for PostgreSQL database interactions
-- Configured with specialized instruction for database querying
+- Named 'enterprise_assistant' for both PostgreSQL database and TALM cluster operations
+- Configured with specialized instructions for database querying and cluster management
 
-**MCPToolset**: Integration with MCP servers:
+**MCPToolset**: Integration with dual MCP servers:
 - Connects to PostgreSQL MCP server via HTTP transport at `http://localhost:3000/mcp`
-- Provides access to `execute_query` tool for database operations
-- Automatically handles MCP protocol communication
+- Connects to TALM MCP server via HTTP transport at `http://localhost:3001/mcp`
+- Provides access to database and cluster management tools
+- Automatically handles MCP protocol communication for both servers
 
 #### ADK Agent Features
 
+**Database Operations:**
 - **Natural Language SQL**: Converts user questions into proper SQL queries
 - **Query Explanation**: Explains SQL reasoning before execution
 - **Result Analysis**: Provides insights and analysis of query results
 - **Schema Exploration**: Helps users understand database structure
-- **Safety First**: Only allows read-only operations through MCP validation
+
+**Cluster Management Operations:**
+- **Cluster Status Monitoring**: Check health and status of managed clusters
+- **Policy Management**: List and analyze cluster compliance policies
+- **Cluster Remediation**: Perform remediation operations on clusters
+- **CGU Operations**: Monitor and manage cluster group upgrades
+
+**Cross-Platform Features:**
+- **Unified Interface**: Single natural language interface for both systems
+- **Session Memory**: Maintains context across database and cluster operations
+- **Safety First**: Read-only database operations and TALM-validated cluster operations
 
 #### Integration Architecture
 
@@ -212,17 +224,20 @@ User Input (Natural Language)
     ↓
 ADK Agent (GPT-4o + Instructions)
     ↓
-MCPToolset (HTTP Transport)
-    ↓
-PostgreSQL MCP Server (execute_query tool)
-    ↓
-PostgreSQL Database (Read-only queries)
+Dual MCPToolset (HTTP Transport)
+    ├── PostgreSQL MCP Server (localhost:3000/mcp)
+    │   ├── execute_query tool
+    │   └── PostgreSQL Database (Read-only queries)
+    └── TALM MCP Server (localhost:3001/mcp)
+        ├── Cluster management tools
+        ├── Policy management tools
+        └── Kubernetes Clusters (via ACM/TALM)
 ```
 
 ## OpenShift Deployment Architecture
 
 ### Container Strategy
-- **Unified Docker Image**: Single container image contains all components (PostgreSQL MCP server, ADK agent)
+- **Unified Docker Image**: Single container image contains all components (PostgreSQL MCP server, TALM MCP server, ADK agent)
 - **Multi-platform Build**: Built for linux/amd64 to ensure compatibility with OpenShift nodes
 - **Command Override**: Different Kubernetes commands run different services from the same image
 
@@ -234,9 +249,12 @@ PostgreSQL Database (Read-only queries)
 
 ### Deployment Components
 - **Namespace**: `mcp-poc` - dedicated project for POC
-- **Single Pod**: Both containers in same pod sharing localhost networking
+- **Single Pod**: Three containers in same pod sharing localhost networking
+  - PostgreSQL MCP server (port 3000)
+  - TALM MCP server (port 3001)
+  - ADK web interface (port 8000)
 - **Secret**: Generated from `.env` file using kustomize secretGenerator
-- **Service**: Exposes both ports (3000 for MCP, 8000 for web)
+- **Service**: Exposes all ports (3000 for PostgreSQL MCP, 3001 for TALM MCP, 8000 for web)
 - **Route**: OpenShift-specific external access with TLS termination
 
 ### Environment Configuration
@@ -244,10 +262,13 @@ Required environment variables managed via Kubernetes secret:
 - `POSTGRES_HOST`: Use Kubernetes DNS format (e.g., `postgres-service.namespace.svc.cluster.local`)
 - `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`: Database connection details
 - `OPENAI_API_KEY`: Required for LiteLlm model in ADK agent
-- `MCP_SERVER_URL`: Automatically set to `http://localhost:3000/mcp` for pod-local communication
+- `POSTGRES_MCP_URL`: Automatically set to `http://localhost:3000/mcp` for pod-local communication
+- `TALM_MCP_URL`: Automatically set to `http://localhost:3001/mcp` for pod-local communication
 
 ### Networking
-- **Pod-local Communication**: ADK web client connects to PostgreSQL MCP server via localhost
+- **Pod-local Communication**: ADK web client connects to both MCP servers via localhost
+  - PostgreSQL MCP server: `http://localhost:3000/mcp`
+  - TALM MCP server: `http://localhost:3001/mcp`
 - **External Access**: Only web interface (port 8000) exposed via OpenShift Route
 - **TLS**: Automatic HTTPS with edge termination and redirect from HTTP
 
