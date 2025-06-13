@@ -81,15 +81,31 @@ oc get route mcp-app-route -n mcp-poc -o jsonpath='{.spec.host}'
 #### Environment Configuration
 Create `.env` file with required variables:
 ```bash
-# PostgreSQL Database Configuration
-POSTGRES_HOST=postgres-service.namespace.svc.cluster.local
-POSTGRES_PORT=5432
-POSTGRES_DB=your-database-name
-POSTGRES_USER=your-username
-POSTGRES_PASSWORD=your-password
+# Multi-Database Configuration
+# Alarms Database
+ALARMS_DB_HOST=your-postgres-host
+ALARMS_DB_PORT=5432
+ALARMS_DB_NAME=alarms
+ALARMS_DB_USER=alarms
+ALARMS_DB_PASSWORD=your-password
 
-# OpenAI API Configuration  
+# Resources Database
+RESOURCES_DB_HOST=your-postgres-host
+RESOURCES_DB_PORT=5432
+RESOURCES_DB_NAME=resources
+RESOURCES_DB_USER=resources
+RESOURCES_DB_PASSWORD=your-password
+
+# Clusters Database
+CLUSTERS_DB_HOST=your-postgres-host
+CLUSTERS_DB_PORT=5432
+CLUSTERS_DB_NAME=clusters
+CLUSTERS_DB_USER=clusters
+CLUSTERS_DB_PASSWORD=your-password
+
+# OpenAI API Configuration
 OPENAI_API_KEY=your-openai-api-key-here
+OPENAI_MODEL=openai/gpt-4.1
 
 # MCP Server URLs (automatically configured in deployment)
 POSTGRES_MCP_URL=http://localhost:3000/mcp
@@ -154,11 +170,21 @@ Add these configurations to your Claude Desktop config:
    ],
    "cwd": "/path/to/mcp-ran-poc",
    "env": {
-      "POSTGRES_HOST": "localhost",
-      "POSTGRES_PORT": "5432",
-      "POSTGRES_DB": "your_database_name",
-      "POSTGRES_USER": "your_username", 
-      "POSTGRES_PASSWORD": "your_password"
+      "ALARMS_DB_HOST": "your-postgres-host",
+      "ALARMS_DB_PORT": "5432",
+      "ALARMS_DB_NAME": "alarms",
+      "ALARMS_DB_USER": "alarms",
+      "ALARMS_DB_PASSWORD": "your-password",
+      "RESOURCES_DB_HOST": "your-postgres-host",
+      "RESOURCES_DB_PORT": "5432",
+      "RESOURCES_DB_NAME": "resources",
+      "RESOURCES_DB_USER": "resources",
+      "RESOURCES_DB_PASSWORD": "your-password",
+      "CLUSTERS_DB_HOST": "your-postgres-host",
+      "CLUSTERS_DB_PORT": "5432",
+      "CLUSTERS_DB_NAME": "clusters",
+      "CLUSTERS_DB_USER": "clusters",
+      "CLUSTERS_DB_PASSWORD": "your-password"
    }
   }
  }
@@ -190,11 +216,21 @@ This format has been tested and works:
     "python", "ocloud-pg.py"
    ],
    "env": {
-    "POSTGRES_HOST": "localhost",
-    "POSTGRES_PORT": "5432",
-    "POSTGRES_DB": "your_database_name",
-    "POSTGRES_USER": "your_username",
-    "POSTGRES_PASSWORD": "your_password"
+    "ALARMS_DB_HOST": "your-postgres-host",
+    "ALARMS_DB_PORT": "5432",
+    "ALARMS_DB_NAME": "alarms",
+    "ALARMS_DB_USER": "alarms",
+    "ALARMS_DB_PASSWORD": "your-password",
+    "RESOURCES_DB_HOST": "your-postgres-host",
+    "RESOURCES_DB_PORT": "5432",
+    "RESOURCES_DB_NAME": "resources",
+    "RESOURCES_DB_USER": "resources",
+    "RESOURCES_DB_PASSWORD": "your-password",
+    "CLUSTERS_DB_HOST": "your-postgres-host",
+    "CLUSTERS_DB_PORT": "5432",
+    "CLUSTERS_DB_NAME": "clusters",
+    "CLUSTERS_DB_USER": "clusters",
+    "CLUSTERS_DB_PASSWORD": "your-password"
    }
   }
  }
@@ -204,7 +240,8 @@ This format has been tested and works:
 Replace:
 - `/path/to/mcp-ran-poc` with this repository's absolute path
 - `/path/to/your/kubeconfig.yaml` with your cluster's kubeconfig file
-- PostgreSQL environment variables with your actual database credentials
+- `your-postgres-host` with your PostgreSQL server hostname
+- `your-password` with your actual database passwords for each database
 
 ## Server Features
 
