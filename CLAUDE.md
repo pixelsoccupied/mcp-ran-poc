@@ -8,7 +8,7 @@ This repository contains MCP servers and an ADK agent for database querying and 
 
 1. **TALM MCP Server** (`servers/talm.py`): A TALM (Topology Aware Lifecycle Manager) MCP Server for Red Hat Advanced Cluster Management (ACM). It provides a Model Context Protocol interface to manage Kubernetes cluster lifecycle operations through ACM's TALM framework.
 
-2. **PostgreSQL MCP Server** (`servers/ocloud-pg.py`): A natural language SQL query interface for PostgreSQL databases. Allows Claude to execute read-only SQL queries safely.
+2. **PostgreSQL MCP Server** (`servers/ocloud-pg.py`): A multi-database natural language SQL query interface for PostgreSQL databases. Supports three databases (alarms, resources, clusters) with intelligent database selection and allows Claude to execute read-only SQL queries safely.
 
 3. **ADK Agent** (`clients/adk-agents/`): A Google ADK agent that provides a web-based natural language interface to the PostgreSQL MCP server for database querying and analysis.
 
@@ -66,9 +66,12 @@ cp .env.example .env         # Copy environment template
 ```bash
 # Test PostgreSQL server functionality (requires running MCP client)
 # The PostgreSQL server provides:
-# - Tools: execute_query(database, query) - Execute read-only SQL queries
+# - Tools: select_database(query_description) - AI-driven database selection
+# - Tools: execute_query(database, query) - Execute read-only SQL queries with exploration guidance
+# - Tools: list_all_databases() - List available databases with connection status
 # Environment variables required:
-# - POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD
+# Legacy (backward compatibility): POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD
+# Multi-database: ALARMS_DB_*, RESOURCES_DB_*, CLUSTERS_DB_* (see .env.example)
 ```
 
 #### ADK Agent
@@ -146,11 +149,12 @@ The server implements graceful degradation:
 
 **PostgresContext**: Shared context class that manages PostgreSQL connections:
 - `connections`: Dictionary of database name to `asyncpg.Connection` objects
-- Supports multiple database connections simultaneously
+- Supports three databases simultaneously: alarms, resources, clusters
+- Intelligent database selection based on query intent
 
 **Lifespan Management**: The `postgres_lifespan()` function handles:
-- Database connection initialization from environment variables
-- Connection validation and error handling
+- Multi-database connection initialization from environment variables
+- Connection validation and error handling for each database
 - Graceful connection cleanup on shutdown
 
 #### PostgreSQL Implementation Details
@@ -159,7 +163,21 @@ The server implements graceful degradation:
 - PostgreSQL connections use `asyncpg` for async database operations
 - Read-only query validation (only SELECT and WITH queries allowed)
 - JSON response format with query metadata (results, count, columns, executed query)
-- Environment-based configuration for database credentials
+- Multi-database environment configuration with fallback to legacy variables
+- Intelligent database selection using keyword-based AI recommendations
+
+#### Multi-Database Architecture
+
+**Three Database Types**:
+- **Alarms Database**: Monitoring, alerting, incidents, notifications, and fault data
+- **Resources Database**: Infrastructure inventory, compute, storage, network resources  
+- **Clusters Database**: Kubernetes clusters, nodes, workloads, and cluster management data
+
+**AI-Driven Database Selection**:
+- `select_database()` tool analyzes query descriptions and recommends appropriate database
+- Keyword matching system for intelligent routing
+- Confidence scoring for database recommendations
+- Support for querying multiple databases when intent is unclear
 
 #### PostgreSQL API Data Format
 

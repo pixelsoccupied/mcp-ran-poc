@@ -31,14 +31,28 @@ async def postgres_lifespan(server: FastMCP) -> AsyncIterator[PostgresContext]:
     """Initialize PostgreSQL connections and clean up on shutdown"""
     logger.info("Initializing PostgreSQL MCP Server...")
 
-    # Database configurations - add more as needed
+    # Multi-database configuration for alarms, resources, and clusters
     databases = {
-        "main": {
-            "host": os.getenv("POSTGRES_HOST", "localhost"),
-            "port": int(os.getenv("POSTGRES_PORT", 5432)),
-            "database": os.getenv("POSTGRES_DB", "alarms"),
-            "user": os.getenv("POSTGRES_USER", "alarms"),
-            "password": os.getenv("POSTGRES_PASSWORD", "debug"),
+        "alarms": {
+            "host": os.getenv("ALARMS_DB_HOST", os.getenv("POSTGRES_HOST", "localhost")),
+            "port": int(os.getenv("ALARMS_DB_PORT", os.getenv("POSTGRES_PORT", 5432))),
+            "database": os.getenv("ALARMS_DB_NAME", "alarms"),
+            "user": os.getenv("ALARMS_DB_USER", os.getenv("POSTGRES_USER", "alarms")),
+            "password": os.getenv("ALARMS_DB_PASSWORD", os.getenv("POSTGRES_PASSWORD", "debug")),
+        },
+        "resources": {
+            "host": os.getenv("RESOURCES_DB_HOST", os.getenv("POSTGRES_HOST", "localhost")),
+            "port": int(os.getenv("RESOURCES_DB_PORT", os.getenv("POSTGRES_PORT", 5432))),
+            "database": os.getenv("RESOURCES_DB_NAME", "resources"),
+            "user": os.getenv("RESOURCES_DB_USER", os.getenv("POSTGRES_USER", "resources")),
+            "password": os.getenv("RESOURCES_DB_PASSWORD", os.getenv("POSTGRES_PASSWORD", "debug")),
+        },
+        "clusters": {
+            "host": os.getenv("CLUSTERS_DB_HOST", os.getenv("POSTGRES_HOST", "localhost")),
+            "port": int(os.getenv("CLUSTERS_DB_PORT", os.getenv("POSTGRES_PORT", 5432))),
+            "database": os.getenv("CLUSTERS_DB_NAME", "clusters"),
+            "user": os.getenv("CLUSTERS_DB_USER", os.getenv("POSTGRES_USER", "clusters")),
+            "password": os.getenv("CLUSTERS_DB_PASSWORD", os.getenv("POSTGRES_PASSWORD", "debug")),
         }
     }
 
@@ -75,32 +89,33 @@ async def postgres_lifespan(server: FastMCP) -> AsyncIterator[PostgresContext]:
 # Create FastMCP server with lifespan
 mcp = FastMCP("PostgreSQL MCP Server", lifespan=postgres_lifespan)
 
-
 @mcp.tool()
 async def execute_query(database: str, query: str) -> str:
     """Execute a read-only SQL query on a specified database.
 
-    This tool allows AI to run SELECT queries to retrieve data, check table schemas,
+    This tool allows AI to run SELECT queries to retrieve data, explore schemas,
     list tables, or perform any read-only database operation.
 
     Args:
-        database: Name of the database to query (e.g., "main")
+        database: Name of the database to query (alarms, resources, or clusters)
         query: PostgreSQL SELECT query to execute
 
     Returns:
         JSON string with query results including data, row count, and column names
 
-    Example queries:
-        - List tables: SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'
-        - Show schema: SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'users'
-        - Get column comments: SELECT column_name, col_description(pgc.oid, pa.attnum) as comment
-                               FROM information_schema.columns c JOIN pg_class pgc ON pgc.relname = c.table_name
-                               JOIN pg_attribute pa ON pa.attrelid = pgc.oid AND pa.attname = c.column_name
-                               WHERE c.table_name = 'your_table'
-        - Get data: SELECT * FROM customers WHERE created_at > '2024-01-01' LIMIT 10
+    Database purposes for intelligent selection:
+        - alarms: Monitoring, alerting, incidents, notifications, and fault data
+        - resources: Infrastructure inventory, compute, storage, network resources
+        - clusters: Kubernetes clusters, nodes, workloads, and cluster management data
 
-    Important: When unsure about column meanings, business logic, or attribute purposes,
-    query for database comments using col_description rather than inferring from data patterns.
+    If unsure about database structure, start with exploration queries:
+        - List tables: SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'
+        - Show schema: SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'your_table'
+        - Get table comments: SELECT schemaname, tablename, obj_description(oid) FROM pg_tables JOIN pg_class ON relname = tablename WHERE schemaname = 'public'
+        - Get column comments: SELECT column_name, col_description(pgc.oid, pa.attnum) as comment FROM information_schema.columns c JOIN pg_class pgc ON pgc.relname = c.table_name JOIN pg_attribute pa ON pa.attrelid = pgc.oid AND pa.attname = c.column_name WHERE c.table_name = 'your_table'
+        - Sample data: SELECT * FROM table_name LIMIT 5
+
+    Strategy: If you don't know the database structure, explore first with schema queries, then craft targeted data queries.
     """
     try:
         # Validate query is read-only

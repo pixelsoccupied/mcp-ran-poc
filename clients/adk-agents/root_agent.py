@@ -7,16 +7,19 @@ from google.adk.sessions import InMemorySessionService
 from google.adk.tools.mcp_tool.mcp_session_manager import StreamableHTTPServerParams
 from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset
 
+import litellm
+litellm._turn_on_debug()
+
 # Get configuration from environment
 POSTGRES_MCP_URL = os.getenv('POSTGRES_MCP_URL', 'http://localhost:3000/mcp')
 TALM_MCP_URL = os.getenv('TALM_MCP_URL', 'http://localhost:3001/mcp')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-
+OPENAI_MODEL = os.getenv('OPENAI_MODEL')
 root_agent = LlmAgent(
-    model=LiteLlm(model="openai/gpt-4o", api_key=OPENAI_API_KEY),
-    name='enterprise_assistant',
+    model=LiteLlm(model=OPENAI_MODEL, api_key=OPENAI_API_KEY),
+    name='ran_assistant',
     instruction="""\
-  You are an Enterprise Assistant that helps users with both PostgreSQL database operations and Kubernetes cluster management through TALM (Topology Aware Lifecycle Manager).
+  You are an RAN Assistant that helps users with both PostgreSQL database operations and Kubernetes cluster management through TALM (Topology Aware Lifecycle Manager).
 
   You have persistent memory across conversations within a session. Use this to:
   - Remember previous queries, cluster operations, and their results

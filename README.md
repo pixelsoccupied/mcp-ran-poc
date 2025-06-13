@@ -14,20 +14,20 @@ This repository contains MCP (Model Context Protocol) servers and an ADK agent f
 ┌─────────────────────┐    ┌─────────────────────┐    ┌─────────────────────┐
 │   Web Browser       │    │   Claude Desktop    │    │   Other MCP         │
 │   + ADK Agent       │    │      Client         │    │    Clients          │
-│     :8000           │    │                     │    │                     │
+│     :8000           │    │                     │    │ e.g APIs only       │
 └─────────┬───────────┘    └─────────┬───────────┘    └─────────┬───────────┘
           │                          │                          │
           └──────────────┬───────────┴────────────┬─────────────┘
                          │                        │
                          ▼                        ▼
           ┌─────────────────────────┐   ┌─────────────────────────────────┐
-          │   PostgreSQL MCP        │   │      TALM MCP Server          │
-          │     Server :3000        │   │        :3001                  │
+          │   PostgreSQL MCP        │   │      TALM MCP Server            │
+          │     Server :3000        │   │        :3001                    │
           └─────────┬───────────────┘   └─────────┬───────────────────────┘
                     │                             │
                     ▼                             ▼
           ┌─────────────────────────┐   ┌─────────────────────────────────┐
-          │   PostgreSQL Database   │   │     Kubernetes Clusters        │
+          │   PostgreSQL Database   │   │     Kubernetes Clusters         │
           └─────────────────────────┘   └─────────────────────────────────┘
 ```
 
