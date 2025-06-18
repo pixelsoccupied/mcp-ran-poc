@@ -35,6 +35,18 @@ uv run python servers/ocloud-pg.py --transport streamable-http --port 3000
 cd clients && adk web
 ```
 
+### Code Quality Commands
+```bash
+# Run linting with ruff
+uv run ruff check
+
+# Run formatting with ruff
+uv run ruff format
+
+# Check and fix linting issues
+uv run ruff check --fix
+```
+
 ### Container Build and Deployment Commands
 ```bash
 # Build Docker image for multiple architectures
