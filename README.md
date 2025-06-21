@@ -14,7 +14,7 @@ This repository contains MCP (Model Context Protocol) servers and an ADK agent f
 ┌─────────────────────┐    ┌─────────────────────┐    ┌─────────────────────┐
 │   Web Browser       │    │   Claude Desktop    │    │   Other MCP         │
 │   + ADK Agent       │    │      Client         │    │    Clients          │
-│     :8000           │    │                     │    │ e.g APIs only       │
+│     :8000           │    │                     │    │                     │
 └─────────┬───────────┘    └─────────┬───────────┘    └─────────┬───────────┘
           │                          │                          │
           └──────────────┬───────────┴────────────┬─────────────┘
