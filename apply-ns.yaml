@@ -1,0 +1,75 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: "ztp-test-policies"
+---
+apiVersion: cluster.open-cluster-management.io/v1beta2
+kind: ManagedClusterSetBinding
+metadata:
+  name: global
+  namespace: ztp-test-policies
+spec:
+  clusterSet: global
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+    annotations:
+        policy.open-cluster-management.io/categories: CM Configuration Management
+        policy.open-cluster-management.io/controls: CM-2 Baseline Configuration
+        policy.open-cluster-management.io/description: "Simple test policy to create a namespace"
+        policy.open-cluster-management.io/standards: NIST SP 800-53
+    name: create-test-namespace
+    namespace: ztp-test-policies
+spec:
+    disabled: false
+    policy-templates:
+        - objectDefinition:
+            apiVersion: policy.open-cluster-management.io/v1
+            kind: ConfigurationPolicy
+            metadata:
+                name: create-test-namespace
+            spec:
+                object-templates:
+                    - complianceType: musthave
+                      objectDefinition:
+                        apiVersion: v1
+                        kind: Namespace
+                        metadata:
+                            name: my-test-namespace
+                            labels:
+                                created-by: "rhacm-policy"
+                                purpose: "testing"
+                remediationAction: inform
+                severity: low
+    remediationAction: inform
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+    name: test-namespace-placement
+    namespace: ztp-test-policies
+spec:
+    predicates:
+        - requiredClusterSelector:
+            labelSelector:
+                matchExpressions:
+                    - key: environment
+                      operator: In
+                      values:
+                        - "test"
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+    name: test-namespace-binding
+    namespace: ztp-test-policies
+placementRef:
+    apiGroup: cluster.open-cluster-management.io
+    kind: Placement
+    name: test-namespace-placement
+subjects:
+    - apiGroup: policy.open-cluster-management.io
+      kind: Policy
+      name: create-test-namespace

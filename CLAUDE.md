@@ -69,9 +69,9 @@ cp .env.example .env         # Copy environment template
 ```bash
 # Test server connectivity (requires running MCP client)
 # The TALM server provides these key endpoints when running:
-# - Resources: talm://clusters, talm://policies, talm://clusters/{name}/status  
-# - Tools: server_status(), remediate_cluster(), check_cluster_health(), list_active_cgus()
-# - Prompts: remediate_cluster_prompt(), cluster_health_audit(), batch_remediation_prompt()
+# - Resources: talm://clusters/{name}/status  
+# - Tools: server_status(), get_clusters_by_label(), get_policies_by_label(), get_active_cgus(), create_cgu()
+# - Prompts: remediate_cluster_prompt(), cluster_health_audit(), batch_remediation_prompt(), create_cgu_workflow()
 ```
 
 #### PostgreSQL Server
@@ -110,9 +110,10 @@ cd clients && adk web
 - Graceful fallback to offline mode when cluster unavailable
 
 **MCP Categories**:
-- **Resources**: Read-only data access (clusters, policies, status) - returns structured objects (dicts/lists)
-- **Tools**: Actions with side effects (remediation, health checks) - returns structured objects for analysis
-- **Prompts**: Reusable templates for common workflows
+- **Resources**: Read-only data access (cluster status) - returns structured objects (dicts/lists)
+- **Tools**: Actions with side effects (server status, cluster analysis, CGU creation) - returns structured objects for analysis
+- **AI-Powered Tools**: Intelligent analysis and CGU creation tools with built-in validation and conflict detection
+- **Prompts**: Reusable templates for common workflows, including AI-driven CGU creation
 
 ### Key CRD Integrations
 
@@ -145,15 +146,50 @@ The server implements graceful degradation:
 - ClusterGroupUpgrade creation follows TALM patterns (batching, timeouts)
 - Server can run in stdio or HTTP transport modes
 
+### AI-Powered CGU Tools
+
+The TALM server includes advanced AI-powered tools for intelligent ClusterGroupUpgrade creation and management:
+
+#### Label-Based Cluster Analysis
+- **`get_clusters_by_label()`**: Finds clusters matching specific labels with comprehensive health validation
+  - Validates cluster readiness (ManagedClusterConditionAvailable, HubAcceptedManagedCluster)
+  - Checks for version skew and resource availability
+  - Verifies proper labeling for CGU targeting
+
+#### Policy Analysis and Validation  
+- **`get_policies_by_label()`**: Analyzes policies targeting specific cluster labels
+  - Validates CGU eligibility (talm.io/upgrade-policy annotations)
+  - Checks Placement and PlacementBinding consistency
+  - Identifies policy conflicts and disruption potential
+  - Ensures namespace consistency across Policy/Placement/PlacementBinding
+
+#### CGU Conflict Detection
+- **`get_active_cgus()`**: Comprehensive CGU analysis for conflict prevention
+  - Detects running/blocked CGUs to prevent resource conflicts
+  - Analyzes resource usage patterns and concurrency limits
+  - Identifies naming conflicts and overlap scenarios
+
+#### Intelligent CGU Creation
+- **`create_cgu()`**: AI-guided CGU creation with validation and safety defaults
+  - Enforces CGU specification best practices
+  - Implements safety-first approach (enable=false by default)
+  - Provides intelligent defaults for batching and timeout strategies
+  - Generates actionable next steps for CGU activation
+
+#### AI-Driven Workflow Prompt
+- **`create_cgu_workflow()`**: Complete guided workflow for CGU creation
+  - Step-by-step validation of clusters, policies, and conflicts
+  - Intelligent CGU specification generation
+  - Comprehensive analysis and issue identification
+
 #### TALM API Data Format
 
-**Resources and Tools Return Format**: All resources and tools return structured Python objects (dictionaries and lists) rather than JSON strings. This makes the data easier for AI systems to parse and analyze:
+**Resources and Tools Return Format**: Resources return structured Python objects, while AI-powered tools return JSON strings for enhanced analysis:
 
-- **Resources**: `list_clusters()` and `list_policies()` return `List[Dict[str, Any]]`
 - **Status Resources**: `get_cluster_status()` returns `Dict[str, Any]` 
-- **Tools**: `check_cluster_health()` and `list_active_cgus()` return structured objects
+- **AI-Powered Tools**: `get_clusters_by_label()`, `get_policies_by_label()`, `get_active_cgus()`, `create_cgu()` return JSON strings with rich metadata for AI analysis
 - **Kubernetes Objects**: All K8s objects are converted using `.to_dict()` for JSON serialization
-- **Tools with Side Effects**: `remediate_cluster()` and `server_status()` still return JSON strings for backward compatibility
+- **Tools with Side Effects**: `server_status()` returns JSON strings for backward compatibility
 
 ### PostgreSQL Server Architecture
 

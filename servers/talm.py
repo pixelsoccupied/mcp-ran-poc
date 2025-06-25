@@ -8,7 +8,6 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Any
 
 from kubernetes import client, config
@@ -112,48 +111,6 @@ mcp = FastMCP("TALM MCP Server", lifespan=talm_lifespan)
 # ================================
 
 
-@mcp.resource("talm://clusters")
-def list_clusters() -> list[dict[str, Any]]:
-    """List all managed clusters in ACM"""
-    try:
-        ctx = get_ctx_or_raise()
-
-        managed_cluster_api = ctx.dynamic_client.resources.get(
-            api_version="cluster.open-cluster-management.io/v1", kind="ManagedCluster"
-        )
-
-        clusters = managed_cluster_api.get()
-        # Convert to serializable format
-        return [cluster.to_dict() for cluster in clusters.items]
-
-    except ApiException as e:
-        raise ResourceError(f"Kubernetes API error: {e.reason}") from e
-    except Exception as e:
-        logger.error(f"Failed to list clusters: {e}")
-        raise ResourceError(f"Failed to list clusters: {str(e)}") from e
-
-
-@mcp.resource("talm://policies")
-def list_policies() -> list[dict[str, Any]]:
-    """List all policies bound to managed clusters"""
-    try:
-        ctx = get_ctx_or_raise()
-
-        policy_api = ctx.dynamic_client.resources.get(
-            api_version="policy.open-cluster-management.io/v1", kind="Policy"
-        )
-
-        policies = policy_api.get()
-        # Convert to serializable format
-        return [policy.to_dict() for policy in policies.items]
-
-    except ApiException as e:
-        raise ResourceError(f"Kubernetes API error: {e.reason}") from e
-    except Exception as e:
-        logger.error(f"Failed to list policies: {e}")
-        raise ResourceError(f"Failed to list policies: {str(e)}") from e
-
-
 @mcp.resource("talm://clusters/{cluster_name}/status")
 def get_cluster_status(cluster_name: str) -> dict[str, Any]:
     """Get detailed status for a specific cluster"""
@@ -239,157 +196,277 @@ def server_status() -> str:
 
 
 @mcp.tool()
-def remediate_cluster(cluster_name: str) -> str:
-    """Create a ClusterGroupUpgrade to remediate policy compliance issues for a specific cluster.
+def get_clusters_by_label(label_key: str, label_value: str) -> str:
+    """Get all ManagedClusters matching a specific label for CGU analysis.
 
-    This tool creates a TALM ClusterGroupUpgrade resource that will re-apply all
-    non-compliant policies to bring the cluster back into compliance.
+    The AI should analyze the returned clusters for CGU readiness by checking:
+
+    CLUSTER HEALTH VALIDATION:
+    - status.conditions[] where type="ManagedClusterConditionAvailable" should have status="True"
+    - status.conditions[] where type="HubAcceptedManagedCluster" should have status="True"
+    - Look for any conditions with status="False" or reason indicating issues
+
+    CLUSTER READINESS INDICATORS:
+    - Check if cluster has been recently created (may need time to stabilize)
+    - Look for version skew in status.version if doing upgrades
+    - Check allocatable resources in status if resource-intensive policies
+
+    LABELS TO VERIFY:
+    - Confirm the target label is present: metadata.labels[label_key] == label_value
+    - Look for other relevant labels like cluster-role, environment, etc.
+    - Check for any conflicting labels that might affect policy application
 
     Args:
-        cluster_name: Name of the ManagedCluster to remediate
+        label_key: Label key to match clusters (e.g., "environment")
+        label_value: Label value to match (e.g., "test")
 
     Returns:
-        JSON string with remediation status, CGU name, and monitoring information
+        JSON string with all matching ManagedCluster CRs for AI analysis
     """
     try:
         ctx = get_ctx_or_raise()
 
-        # Check if cluster exists (v1)
         managed_cluster_api = ctx.dynamic_client.resources.get(
             api_version="cluster.open-cluster-management.io/v1", kind="ManagedCluster"
         )
 
-        try:
-            managed_cluster_api.get(name=cluster_name)
-        except ApiException as e:
-            if e.status == 404:
-                raise ToolError(f"Cluster {cluster_name} not found") from e
-            raise ToolError(f"Kubernetes API error: {e.reason}") from e
+        all_clusters = managed_cluster_api.get()
+        matching_clusters = []
 
-        # Create ClusterGroupUpgrade for remediation (v1alpha1)
+        for cluster in all_clusters.items:
+            labels = cluster.metadata.get("labels", {})
+            if labels.get(label_key) == label_value:
+                matching_clusters.append(cluster.to_dict())
+
+        return json.dumps(
+            {
+                "label_selector": f"{label_key}={label_value}",
+                "cluster_count": len(matching_clusters),
+                "clusters": matching_clusters,
+            },
+            indent=2,
+        )
+
+    except Exception as e:
+        raise ToolError(f"Failed to get clusters: {str(e)}") from e
+
+
+@mcp.tool()
+def get_policies_by_label(label_key: str, label_value: str) -> str:
+    """Get all Policies that target clusters with the specified label for CGU analysis.
+
+    The AI should analyze the returned data to validate CGU prerequisites:
+
+    POLICY VALIDATION:
+    - Check metadata.annotations["talm.io/upgrade-policy"] == "true" for CGU eligibility
+    - Verify remediationAction is set appropriately (inform/enforce)
+    - Look for policy.spec.disabled != true
+
+    PLACEMENT VALIDATION:
+    - Ensure each policy has a corresponding Placement that targets label_key=label_value
+    - Check placement.spec.predicates[].requiredClusterSelector.labelSelector.matchExpressions[]
+    - Verify the placement has key=label_key, operator="In", values=[label_value]
+
+    BINDING VALIDATION:
+    - Confirm each policy has a PlacementBinding connecting it to its Placement
+    - Check binding.subjects[] contains the policy name
+    - Verify binding.placementRef.name matches the placement name
+
+    POLICY CONTENT VALIDATION:
+    - Look at policy.spec.policy-templates[].objectDefinition.spec.object-templates[]
+    - Check for conflicting policies (same resources, different configs)
+    - Identify policies that require cluster restarts or disruption
+
+    NAMESPACE CONSISTENCY:
+    - All related CRs (Policy, Placement, PlacementBinding) should be in same namespace
+    - This namespace will be used for the CGU
+
+    Args:
+        label_key: Label key that policies should target (e.g., "environment")
+        label_value: Label value that policies should target (e.g., "test")
+
+    Returns:
+        JSON string with Policies, Placements, and PlacementBindings for AI analysis
+    """
+    try:
+        ctx = get_ctx_or_raise()
+
+        # Get all Policies
+        policy_api = ctx.dynamic_client.resources.get(
+            api_version="policy.open-cluster-management.io/v1", kind="Policy"
+        )
+        all_policies = policy_api.get()
+
+        # Get all Placements
+        placement_api = ctx.dynamic_client.resources.get(
+            api_version="cluster.open-cluster-management.io/v1beta1", kind="Placement"
+        )
+        all_placements = placement_api.get()
+
+        # Get all PlacementBindings
+        binding_api = ctx.dynamic_client.resources.get(
+            api_version="policy.open-cluster-management.io/v1", kind="PlacementBinding"
+        )
+        all_bindings = binding_api.get()
+
+        return json.dumps(
+            {
+                "label_selector": f"{label_key}={label_value}",
+                "policies": [p.to_dict() for p in all_policies.items],
+                "placements": [p.to_dict() for p in all_placements.items],
+                "placement_bindings": [b.to_dict() for b in all_bindings.items],
+            },
+            indent=2,
+        )
+
+    except Exception as e:
+        raise ToolError(f"Failed to get policies: {str(e)}") from e
+
+
+@mcp.tool()
+def get_active_cgus() -> str:
+    """Get all ClusterGroupUpgrade CRs to check for conflicts before creating new CGUs.
+
+    The AI should analyze existing CGUs to prevent conflicts:
+
+    CGU CONFLICT DETECTION:
+    - Look for CGUs with status.status.status="InProgress" or "PartiallyDone"
+    - Check spec.clusters[] for overlap with target clusters
+    - Avoid creating CGUs that target same clusters as active ones
+
+    CGU STATUS ANALYSIS:
+    - "Completed": CGU finished successfully, safe to create new ones
+    - "InProgress": CGU actively running, wait before creating new ones
+    - "PartiallyDone": Some clusters failed, investigate before proceeding
+    - "Timedout": CGU failed, may need cleanup before new CGU
+    - "Blocked": CGU blocked by preconditions, check what's blocking
+
+    RESOURCE USAGE PATTERNS:
+    - Check spec.managedPolicies[] to see what policies are being applied
+    - Look at spec.remediationStrategy.maxConcurrency for throughput planning
+    - Review status.clusters[] for per-cluster status
+
+    NAMING CONFLICTS:
+    - Ensure proposed CGU name doesn't conflict with existing CGUs
+    - Check metadata.name across all namespaces if needed
+
+    Args:
+        None
+
+    Returns:
+        JSON string with all ClusterGroupUpgrade CRs for AI conflict analysis
+    """
+    try:
+        ctx = get_ctx_or_raise()
+
         cgu_api = ctx.dynamic_client.resources.get(
             api_version="ran.openshift.io/v1alpha1", kind="ClusterGroupUpgrade"
         )
 
-        timestamp = int(datetime.now().timestamp())
-        cgu_name = f"{cluster_name}-remediate-{timestamp}"
+        all_cgus = cgu_api.get()
 
-        # Build CGU spec according to CRD
-        cgu_spec = {
-            "apiVersion": "ran.openshift.io/v1alpha1",
-            "kind": "ClusterGroupUpgrade",
-            "metadata": {"name": cgu_name, "namespace": "ztp-install"},
-            "spec": {
-                "clusters": [cluster_name],
-                "enable": True,
-                "managedPolicies": [],  # Auto-discovered
-                "remediationStrategy": {
-                    "maxConcurrency": 1,
-                    "timeout": 240,  # Default from CRD
-                },
+        return json.dumps(
+            {
+                "cgu_count": len(all_cgus.items),
+                "cgus": [cgu.to_dict() for cgu in all_cgus.items],
             },
+            indent=2,
+        )
+
+    except Exception as e:
+        raise ToolError(f"Failed to get CGUs: {str(e)}") from e
+
+
+@mcp.tool()
+def create_cgu(cgu_spec: dict) -> str:
+    """Create a ClusterGroupUpgrade CR with the provided specification.
+
+    The AI should construct the cgu_spec dict based on its analysis of clusters and policies.
+
+    REQUIRED CGU SPEC STRUCTURE:
+    {
+        "apiVersion": "ran.openshift.io/v1alpha1",
+        "kind": "ClusterGroupUpgrade",
+        "metadata": {
+            "name": "unique-cgu-name",
+            "namespace": "same-as-policies"
+        },
+        "spec": {
+            "clusters": ["cluster1", "cluster2"],  # From cluster analysis
+            "managedPolicies": ["policy1", "policy2"],  # From policy analysis
+            "enable": false,  # Start disabled for safety
+            "remediationStrategy": {
+                "maxConcurrency": 2,  # Based on cluster count/capacity
+                "timeout": 240  # Based on policy complexity
+            }
         }
+    }
+
+    CGU NAMING BEST PRACTICES:
+    - Include environment/label in name: "cgu-test-env-timestamp"
+    - Include timestamp to avoid conflicts: int(datetime.now().timestamp())
+    - Keep names under 63 characters for Kubernetes compatibility
+
+    REMEDIATION STRATEGY GUIDELINES:
+    - maxConcurrency: 1-2 for production, higher for test environments
+    - timeout: 240 minutes default, increase for complex policies
+    - Consider cluster capacity when setting concurrency
+
+    SAFETY DEFAULTS:
+    - Always start with enable=false for review
+    - User can enable CGU after reviewing the created resource
+    - Include informative annotations for tracking
+
+    Args:
+        cgu_spec: Complete CGU specification dict to create
+
+    Returns:
+        JSON string with creation status and CGU details
+    """
+    try:
+        ctx = get_ctx_or_raise()
+
+        cgu_api = ctx.dynamic_client.resources.get(
+            api_version="ran.openshift.io/v1alpha1", kind="ClusterGroupUpgrade"
+        )
+
+        # Validate required fields
+        if not all(
+            key in cgu_spec for key in ["apiVersion", "kind", "metadata", "spec"]
+        ):
+            raise ToolError(
+                "CGU spec missing required fields: apiVersion, kind, metadata, spec"
+            )
+
+        if not all(key in cgu_spec["spec"] for key in ["clusters", "managedPolicies"]):
+            raise ToolError(
+                "CGU spec.spec missing required fields: clusters, managedPolicies"
+            )
+
+        namespace = cgu_spec["metadata"]["namespace"]
 
         # Create the CGU
-        cgu_api.create(body=cgu_spec, namespace="ztp-install")
+        cgu_api.create(body=cgu_spec, namespace=namespace)
 
         return json.dumps(
             {
                 "success": True,
-                "cgu_name": cgu_name,
-                "cluster_name": cluster_name,
-                "namespace": "ztp-install",
-                "message": "Remediation CGU created successfully",
-                "monitor_resource": f"talm://clusters/{cluster_name}/status",
-                "remediation_strategy": {"max_concurrency": 1, "timeout": 240},
-            }
+                "cgu_name": cgu_spec["metadata"]["name"],
+                "namespace": namespace,
+                "clusters": cgu_spec["spec"]["clusters"],
+                "policies": cgu_spec["spec"]["managedPolicies"],
+                "enabled": cgu_spec["spec"].get("enable", False),
+                "message": "CGU created successfully - review and enable when ready",
+                "next_steps": [
+                    f"Review CGU: kubectl get cgu {cgu_spec['metadata']['name']} -n {namespace} -o yaml",
+                    f'Enable CGU: kubectl patch cgu {cgu_spec["metadata"]["name"]} -n {namespace} --type merge -p \'{{"spec":{{"enable":true}}}}\'',
+                ],
+            },
+            indent=2,
         )
 
     except Exception as e:
-        logger.error(f"Failed to remediate cluster {cluster_name}: {e}")
-        raise ToolError(
-            f"Failed to remediate cluster '{cluster_name}': {str(e)}"
-        ) from e
-
-
-@mcp.tool()
-def check_cluster_health(cluster_name: str) -> dict[str, Any]:
-    """Analyze the health status of a specific managed cluster.
-
-    Args:
-        cluster_name: Name of the ManagedCluster to check
-
-    Returns:
-        Dictionary with cluster and CGU data for AI analysis
-    """
-    try:
-        ctx = get_ctx_or_raise()
-
-        managed_cluster_api = ctx.dynamic_client.resources.get(
-            api_version="cluster.open-cluster-management.io/v1", kind="ManagedCluster"
-        )
-
-        try:
-            cluster = managed_cluster_api.get(name=cluster_name)
-        except ApiException as e:
-            if e.status == 404:
-                raise ToolError(f"Cluster {cluster_name} not found") from e
-            raise
-
-        # Get associated CGUs
-        recent_cgus = []
-        try:
-            cgu_api = ctx.dynamic_client.resources.get(
-                api_version="ran.openshift.io/v1alpha1", kind="ClusterGroupUpgrade"
-            )
-            cgus = cgu_api.get()
-            recent_cgus = [
-                cgu
-                for cgu in cgus.items
-                if cluster_name in cgu.spec.get("clusters", [])
-            ]
-        except Exception as e:
-            logger.warning(f"Could not fetch CGUs for health check: {e}")
-
-        return {
-            "cluster": cluster.to_dict(),
-            "cgus": [cgu.to_dict() for cgu in recent_cgus],
-        }
-
-    except Exception as e:
-        logger.error(f"Failed to check cluster health: {e}")
-        raise ToolError(f"Failed to check health: {str(e)}") from e
-
-
-@mcp.tool()
-def list_active_cgus() -> list[dict[str, Any]]:
-    """List all currently active ClusterGroupUpgrade operations.
-
-    Returns:
-        List of active CGUs for AI analysis
-    """
-    try:
-        ctx = get_ctx_or_raise()
-
-        cgu_api = ctx.dynamic_client.resources.get(
-            api_version="ran.openshift.io/v1alpha1", kind="ClusterGroupUpgrade"
-        )
-
-        cgus = cgu_api.get()
-
-        # Filter for active CGUs
-        active_cgus = []
-        for cgu in cgus.items:
-            status = cgu.status.get("status", {}).get("status", "Unknown")
-            if status in ["InProgress", "Timedout", "PartiallyDone"]:
-                active_cgus.append(cgu)
-
-        # Convert to serializable format
-        return [cgu.to_dict() for cgu in active_cgus]
-
-    except Exception as e:
-        logger.error(f"Failed to list active CGUs: {e}")
-        raise ToolError(f"Failed to list active CGUs: {str(e)}") from e
+        raise ToolError(f"Failed to create CGU: {str(e)}") from e
 
 
 # ================================
@@ -439,6 +516,30 @@ Please help me create a strategy to:
 Use the TALM tools to implement this batch processing approach."""
 
 
+@mcp.prompt()
+def create_cgu_workflow() -> str:
+    """AI-driven workflow to create a CGU with full validation and analysis"""
+    return """I need to create a ClusterGroupUpgrade (CGU) for my RHACM environment.
+
+Please help me with this workflow:
+
+1. **Ask for target criteria**: What label should I use to find clusters and policies? (e.g., environment=test)
+
+2. **Analyze clusters**: Use get_clusters_by_label() to find target clusters and validate their health, readiness, and proper labeling.
+
+3. **Analyze policies**: Use get_policies_by_label() to find policies targeting those clusters and validate they have proper Placements, PlacementBindings, and CGU annotations.
+
+4. **Check conflicts**: Use get_active_cgus() to ensure no conflicting CGUs are running on the target clusters.
+
+5. **Generate CGU spec**: Based on your analysis, create an appropriate CGU specification with smart defaults for batching, timeouts, and naming.
+
+6. **Create CGU**: Use create_cgu() with the generated spec, starting with enable=false for safety.
+
+7. **Provide next steps**: Give the user commands to review and enable the CGU when ready.
+
+Please be thorough in your analysis and explain any issues you find with the clusters, policies, or existing CGUs."""
+
+
 # ================================
 # MAIN EXECUTION
 # ================================
@@ -474,6 +575,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-# label policy the clusters   (manual)
-# build the new CGU
