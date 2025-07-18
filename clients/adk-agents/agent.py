@@ -22,7 +22,7 @@ talm_toolset = MCPToolset(
 # Create the root agent following ADK conventions
 root_agent = Agent(
     name="enterprise_assistant",
-    model=LiteLlm(model=OPENAI_MODEL, api_key=OPENAI_API_KEY),
+    model= "gemini-2.5-pro", #LiteLlm(model=OPENAI_MODEL, api_key=OPENAI_API_KEY),
     description=(
         "RAN Assistant that helps users with PostgreSQL database operations "
         "and Kubernetes cluster management through TALM (Topology Aware Lifecycle Manager)."

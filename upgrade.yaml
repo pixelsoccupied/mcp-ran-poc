@@ -1,0 +1,240 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: "ztp-core-policies"
+---
+# ManagedClusterSetBinding for Placement to work
+apiVersion: cluster.open-cluster-management.io/v1beta2
+kind: ManagedClusterSetBinding
+metadata:
+  name: global
+  namespace: ztp-core-policies
+spec:
+  clusterSet: global
+---
+# PREP POLICY - Prepares cluster for upgrade
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  name: ocp-upgrade-prep
+  namespace: ztp-core-policies
+  annotations:
+    ran.openshift.io/ztp-deploy-wave: "100"
+spec:
+  disabled: false
+  remediationAction: inform
+  policy-templates:
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: pause-mcp-for-upgrade
+        spec:
+          remediationAction: inform
+          severity: low
+          object-templates:
+            # Pause worker MCP to prevent reboots during upgrade
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: machineconfiguration.openshift.io/v1
+                kind: MachineConfigPool
+                metadata:
+                  name: worker
+                spec:
+                  paused: true
+            # Pause master MCP
+#            - complianceType: musthave
+#              objectDefinition:
+#                apiVersion: machineconfiguration.openshift.io/v1
+#                kind: MachineConfigPool
+#                metadata:
+#                  name: master
+#                spec:
+#                  paused: false
+---
+# OCP UPGRADE POLICY - Triggers the actual OCP upgrade
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  name: ocp-upgrade
+  namespace: ztp-core-policies
+  annotations:
+    ran.openshift.io/ztp-deploy-wave: "101"
+spec:
+  disabled: false
+  remediationAction: inform
+  policy-templates:
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: upgrade-cluster-version
+        spec:
+          remediationAction: inform
+          severity: low
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: config.openshift.io/v1
+                kind: ClusterVersion
+                metadata:
+                  name: version
+                spec:
+                  # UPDATE THESE VALUES FOR YOUR TARGET VERSION
+                  upstream: https://api.openshift.com/api/upgrades_info/v1/graph
+                  channel: stable-4.17
+                  desiredUpdate:
+                    version: 4.17.35
+                  # For disconnected environments, add:
+                  # upstream: https://mirror.company.com/graph
+                  # Or use specific image:
+                  # desiredUpdate:
+                  #   image: quay.io/openshift-release-dev/ocp-release@sha256:...
+---
+# OLM UPGRADE POLICY - Updates OLM and operators after OCP upgrade
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  name: ocp-upgrade-olm
+  namespace: ztp-core-policies
+  annotations:
+    ran.openshift.io/ztp-deploy-wave: "102"
+spec:
+  disabled: false
+  remediationAction: inform
+  policy-templates:
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: unpause-mcp-after-upgrade
+        spec:
+          remediationAction: inform
+          severity: low
+          object-templates:
+            # Unpause MCPs to apply any operator updates
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: machineconfiguration.openshift.io/v1
+                kind: MachineConfigPool
+                metadata:
+                  name: worker
+                spec:
+                  paused: false
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: machineconfiguration.openshift.io/v1
+                kind: MachineConfigPool
+                metadata:
+                  name: master
+                spec:
+                  paused: false
+---
+# PLACEMENT - Target clusters with custom label test=mcp
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: placement-ocp-upgrade-prep
+  namespace: ztp-core-policies
+spec:
+  predicates:
+    - requiredClusterSelector:
+        labelSelector:
+          matchExpressions:
+            - key: test
+              operator: In
+              values:
+                - "mcp"
+  tolerations:
+    - key: cluster.open-cluster-management.io/unavailable
+      operator: Exists
+    - key: cluster.open-cluster-management.io/unreachable
+      operator: Exists
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: placement-ocp-upgrade
+  namespace: ztp-core-policies
+spec:
+  predicates:
+    - requiredClusterSelector:
+        labelSelector:
+          matchExpressions:
+            - key: test
+              operator: In
+              values:
+                - "mcp"
+  tolerations:
+    - key: cluster.open-cluster-management.io/unavailable
+      operator: Exists
+    - key: cluster.open-cluster-management.io/unreachable
+      operator: Exists
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: placement-ocp-upgrade-olm
+  namespace: ztp-core-policies
+spec:
+  predicates:
+    - requiredClusterSelector:
+        labelSelector:
+          matchExpressions:
+            - key: test
+              operator: In
+              values:
+                - "mcp"
+  tolerations:
+    - key: cluster.open-cluster-management.io/unavailable
+      operator: Exists
+    - key: cluster.open-cluster-management.io/unreachable
+      operator: Exists
+---
+# PLACEMENT BINDINGS
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: binding-ocp-upgrade-prep
+  namespace: ztp-core-policies
+placementRef:
+  apiGroup: cluster.open-cluster-management.io
+  kind: Placement
+  name: placement-ocp-upgrade-prep
+subjects:
+  - apiGroup: policy.open-cluster-management.io
+    kind: Policy
+    name: ocp-upgrade-prep
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: binding-ocp-upgrade
+  namespace: ztp-core-policies
+placementRef:
+  apiGroup: cluster.open-cluster-management.io
+  kind: Placement
+  name: placement-ocp-upgrade
+subjects:
+  - apiGroup: policy.open-cluster-management.io
+    kind: Policy
+    name: ocp-upgrade
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: binding-ocp-upgrade-olm
+  namespace: ztp-core-policies
+placementRef:
+  apiGroup: cluster.open-cluster-management.io
+  kind: Placement
+  name: placement-ocp-upgrade-olm
+subjects:
+  - apiGroup: policy.open-cluster-management.io
+    kind: Policy
+    name: ocp-upgrade-olm
+
+
+- demo 
+  AI policy redmiation
