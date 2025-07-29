@@ -47,9 +47,10 @@ spec:
         app: mcp-app
     spec:
       serviceAccountName: talm-mcp-sa
+      restartPolicy: Always
       containers:
       - name: postgresql-mcp
-        image: quay.io/npathan/dev:mcp-talm-poc-dev
+        image: quay.io/npathan/dev:mcp-talm-poc-latest
         imagePullPolicy: Always
         command: ["uv", "run", "python", "servers/ocloud-pg.py"]
         args: ["--transport", "streamable-http", "--port", "3000"]
@@ -60,7 +61,7 @@ spec:
         - secretRef:
             name: mcp-secrets
       - name: talm-mcp
-        image: quay.io/npathan/dev:mcp-talm-poc-dev
+        image: quay.io/npathan/dev:mcp-talm-poc-latest
         imagePullPolicy: Always
         command: ["uv", "run", "python", "servers/talm.py"]
         args: ["--transport", "streamable-http", "--port", "3001"]
@@ -71,7 +72,7 @@ spec:
         - secretRef:
             name: mcp-secrets
       - name: adk-web
-        image: quay.io/npathan/dev:mcp-talm-poc-dev
+        image: quay.io/npathan/dev:mcp-talm-poc-latest
         imagePullPolicy: Always
         command: ["sh", "-c"]
         args: ["cd clients && uv run adk web --host 0.0.0.0 --port 8000"]

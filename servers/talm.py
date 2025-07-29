@@ -194,9 +194,20 @@ def server_status() -> str:
     except Exception as e:
         return json.dumps({"error": f"Server status check failed: {str(e)}"})
 
+
 @mcp.tool()
-def get_clusters_by_label(label_key: str, label_value: str) -> str:
-    """Get all ManagedClusters matching a specific label for CGU analysis.
+def get_clusters_by_label(label_key: str = None, label_value: str = None) -> str:
+    """Get all ManagedClusters or filter by specific labels.
+
+    PRIMARY USE CASES:
+    1. List all clusters: Call without parameters to get complete cluster inventory
+    2. Filter by label: Provide label_key and label_value to find specific clusters
+    3. CGU analysis: Use for upgrade workflows and cluster group operations
+
+    EXAMPLES:
+    - get_clusters_by_label() → Returns ALL ManagedClusters
+    - get_clusters_by_label("environment", "prod") → Returns clusters with environment=prod
+    - get_clusters_by_label("mcp-test", "1") → Returns clusters with mcp-test=1
 
     CRITICAL FOR UPGRADE WORKFLOWS:
     When using this for upgrades, the AI should check BOTH the target label AND version label.
@@ -222,11 +233,13 @@ def get_clusters_by_label(label_key: str, label_value: str) -> str:
     3. Only clusters with NonCompliant upgrade policies are candidates for CGU
 
     Args:
-        label_key: Label key to match clusters (e.g., "mcp-test", "environment")
-        label_value: Label value to match (e.g., "1", "test")
+        label_key: Label key to match clusters (e.g., "mcp-test", "environment").
+                  Optional - if not provided, returns ALL clusters.
+        label_value: Label value to match (e.g., "1", "test").
+                    Optional - if not provided, returns ALL clusters.
 
     Returns:
-        JSON string with all matching ManagedCluster CRs for AI analysis
+        JSON string with ManagedCluster CRs. Includes cluster count and detailed cluster information.
     """
     try:
         ctx = get_ctx_or_raise()
@@ -239,18 +252,33 @@ def get_clusters_by_label(label_key: str, label_value: str) -> str:
         matching_clusters = []
 
         for cluster in all_clusters.items:
-            labels = cluster.metadata.get("labels", {})
-            if labels.get(label_key) == label_value:
-                matching_clusters.append(cluster.to_dict())
+            # Skip the local-cluster (hub cluster) - not a managed cluster for operations
+            if cluster.metadata.name == "local-cluster":
+                continue
 
-        return json.dumps(
-            {
+            # If no label filtering is requested, include all remaining clusters
+            if label_key is None or label_value is None:
+                matching_clusters.append(cluster.to_dict())
+            else:
+                labels = cluster.metadata.get("labels", {})
+                if labels.get(label_key) == label_value:
+                    matching_clusters.append(cluster.to_dict())
+
+        # Build response based on whether filtering was applied
+        if label_key is None or label_value is None:
+            response = {
+                "label_selector": "all_clusters",
+                "cluster_count": len(matching_clusters),
+                "clusters": matching_clusters,
+            }
+        else:
+            response = {
                 "label_selector": f"{label_key}={label_value}",
                 "cluster_count": len(matching_clusters),
                 "clusters": matching_clusters,
-            },
-            indent=2,
-        )
+            }
+
+        return json.dumps(response, indent=2)
 
     except Exception as e:
         raise ToolError(f"Failed to get clusters: {str(e)}") from e
@@ -394,10 +422,16 @@ def create_cgu(cgu_spec: dict) -> str:
         cgu_api = ctx.dynamic_client.resources.get(
             api_version="ran.openshift.io/v1alpha1", kind="ClusterGroupUpgrade"
         )
-        if not all(key in cgu_spec for key in ["apiVersion", "kind", "metadata", "spec"]):
-            raise ToolError("CGU spec missing required fields: apiVersion, kind, metadata, spec")
+        if not all(
+            key in cgu_spec for key in ["apiVersion", "kind", "metadata", "spec"]
+        ):
+            raise ToolError(
+                "CGU spec missing required fields: apiVersion, kind, metadata, spec"
+            )
         if not all(key in cgu_spec["spec"] for key in ["clusters", "managedPolicies"]):
-            raise ToolError("CGU spec.spec missing required fields: clusters, managedPolicies")
+            raise ToolError(
+                "CGU spec.spec missing required fields: clusters, managedPolicies"
+            )
         namespace = cgu_spec["metadata"]["namespace"]
         cgu_api.create(body=cgu_spec, namespace=namespace)
 
@@ -461,27 +495,36 @@ def patch_cgu(cgu_name: str, namespace: str, patch_spec: dict) -> str:
             name=cgu_name,
             namespace=namespace,
             body=patch_spec,
-            content_type="application/merge-patch+json"
+            content_type="application/merge-patch+json",
         )
 
         # Extract key status info
         status_info = {}
-        if hasattr(patched_cgu, 'status') and patched_cgu.status:
+        if hasattr(patched_cgu, "status") and patched_cgu.status:
             status_info = {
-                "state": patched_cgu.status.get("status", {}).get("currentBatch", "Unknown"),
-                "completedClusters": len(patched_cgu.status.get("status", {}).get("succeeded", [])),
-                "failedClusters": len(patched_cgu.status.get("status", {}).get("failed", [])),
+                "state": patched_cgu.status.get("status", {}).get(
+                    "currentBatch", "Unknown"
+                ),
+                "completedClusters": len(
+                    patched_cgu.status.get("status", {}).get("succeeded", [])
+                ),
+                "failedClusters": len(
+                    patched_cgu.status.get("status", {}).get("failed", [])
+                ),
             }
 
-        return json.dumps({
-            "success": True,
-            "cgu_name": cgu_name,
-            "namespace": namespace,
-            "enabled": patched_cgu.spec.get("enable", False),
-            "patch_applied": patch_spec,
-            "status": status_info,
-            "monitor_command": f"kubectl get cgu {cgu_name} -n {namespace} -w"
-        }, indent=2)
+        return json.dumps(
+            {
+                "success": True,
+                "cgu_name": cgu_name,
+                "namespace": namespace,
+                "enabled": patched_cgu.spec.get("enable", False),
+                "patch_applied": patch_spec,
+                "status": status_info,
+                "monitor_command": f"kubectl get cgu {cgu_name} -n {namespace} -w",
+            },
+            indent=2,
+        )
 
     except Exception as e:
         raise ToolError(f"Failed to patch CGU: {str(e)}") from e
@@ -557,6 +600,7 @@ Please help me with this workflow:
 
 Please be thorough in your analysis and explain any issues you find with the clusters, policies, or existing CGUs."""
 
+
 @mcp.prompt()
 def create_upgrade_cgu_workflow() -> str:
     return """AI-driven workflow to create and manage a cluster upgrade via CGU.
@@ -607,6 +651,7 @@ def create_upgrade_cgu_workflow() -> str:
 
     Remember: The key to successful upgrades is proper policy ordering based on waves!
     """
+
 
 # ================================
 # MAIN EXECUTION

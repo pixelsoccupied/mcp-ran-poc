@@ -1,14 +1,14 @@
 import os
+
 from google.adk.agents import Agent
-from google.adk.models.lite_llm import LiteLlm
 from google.adk.tools.mcp_tool.mcp_session_manager import StreamableHTTPServerParams
 from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset
 
 # Get configuration from environment
-POSTGRES_MCP_URL = os.getenv('POSTGRES_MCP_URL', 'http://localhost:3000/mcp')
-TALM_MCP_URL = os.getenv('TALM_MCP_URL', 'http://localhost:3001/mcp')
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-OPENAI_MODEL = os.getenv('OPENAI_MODEL', 'openai/gpt-4.1')
+POSTGRES_MCP_URL = os.getenv("POSTGRES_MCP_URL", "http://localhost:3000/mcp")
+TALM_MCP_URL = os.getenv("TALM_MCP_URL", "http://localhost:3001/mcp")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "openai/gpt-4.1")
 
 # Initialize MCP toolsets
 postgres_toolset = MCPToolset(
@@ -22,7 +22,7 @@ talm_toolset = MCPToolset(
 # Create the root agent following ADK conventions
 root_agent = Agent(
     name="enterprise_assistant",
-    model= "gemini-2.5-pro", #LiteLlm(model=OPENAI_MODEL, api_key=OPENAI_API_KEY),
+    model="gemini-2.5-pro",  # LiteLlm(model=OPENAI_MODEL, api_key=OPENAI_API_KEY),
     description=(
         "RAN Assistant that helps users with PostgreSQL database operations "
         "and Kubernetes cluster management through TALM (Topology Aware Lifecycle Manager)."
@@ -34,7 +34,7 @@ Your capabilities:
 
 **PostgreSQL Database Operations:**
 - Execute read-only SQL queries (SELECT, WITH statements) safely
-- Translate natural language questions into SQL queries  
+- Translate natural language questions into SQL queries
 - Explain query results and database insights
 - Provide data analysis and reporting
 - Help with database schema exploration

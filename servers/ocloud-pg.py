@@ -34,26 +34,46 @@ async def postgres_lifespan(server: FastMCP) -> AsyncIterator[PostgresContext]:
     # Multi-database configuration for alarms, resources, and clusters
     databases = {
         "alarms": {
-            "host": os.getenv("ALARMS_DB_HOST", os.getenv("POSTGRES_HOST", "localhost")),
+            "host": os.getenv(
+                "ALARMS_DB_HOST", os.getenv("POSTGRES_HOST", "localhost")
+            ),
             "port": int(os.getenv("ALARMS_DB_PORT", os.getenv("POSTGRES_PORT", 5432))),
             "database": os.getenv("ALARMS_DB_NAME", "alarms"),
             "user": os.getenv("ALARMS_DB_USER", os.getenv("POSTGRES_USER", "alarms")),
-            "password": os.getenv("ALARMS_DB_PASSWORD", os.getenv("POSTGRES_PASSWORD", "debug")),
+            "password": os.getenv(
+                "ALARMS_DB_PASSWORD", os.getenv("POSTGRES_PASSWORD", "debug")
+            ),
         },
         "resources": {
-            "host": os.getenv("RESOURCES_DB_HOST", os.getenv("POSTGRES_HOST", "localhost")),
-            "port": int(os.getenv("RESOURCES_DB_PORT", os.getenv("POSTGRES_PORT", 5432))),
+            "host": os.getenv(
+                "RESOURCES_DB_HOST", os.getenv("POSTGRES_HOST", "localhost")
+            ),
+            "port": int(
+                os.getenv("RESOURCES_DB_PORT", os.getenv("POSTGRES_PORT", 5432))
+            ),
             "database": os.getenv("RESOURCES_DB_NAME", "resources"),
-            "user": os.getenv("RESOURCES_DB_USER", os.getenv("POSTGRES_USER", "resources")),
-            "password": os.getenv("RESOURCES_DB_PASSWORD", os.getenv("POSTGRES_PASSWORD", "debug")),
+            "user": os.getenv(
+                "RESOURCES_DB_USER", os.getenv("POSTGRES_USER", "resources")
+            ),
+            "password": os.getenv(
+                "RESOURCES_DB_PASSWORD", os.getenv("POSTGRES_PASSWORD", "debug")
+            ),
         },
         "clusters": {
-            "host": os.getenv("CLUSTERS_DB_HOST", os.getenv("POSTGRES_HOST", "localhost")),
-            "port": int(os.getenv("CLUSTERS_DB_PORT", os.getenv("POSTGRES_PORT", 5432))),
+            "host": os.getenv(
+                "CLUSTERS_DB_HOST", os.getenv("POSTGRES_HOST", "localhost")
+            ),
+            "port": int(
+                os.getenv("CLUSTERS_DB_PORT", os.getenv("POSTGRES_PORT", 5432))
+            ),
             "database": os.getenv("CLUSTERS_DB_NAME", "clusters"),
-            "user": os.getenv("CLUSTERS_DB_USER", os.getenv("POSTGRES_USER", "clusters")),
-            "password": os.getenv("CLUSTERS_DB_PASSWORD", os.getenv("POSTGRES_PASSWORD", "debug")),
-        }
+            "user": os.getenv(
+                "CLUSTERS_DB_USER", os.getenv("POSTGRES_USER", "clusters")
+            ),
+            "password": os.getenv(
+                "CLUSTERS_DB_PASSWORD", os.getenv("POSTGRES_PASSWORD", "debug")
+            ),
+        },
     }
 
     connections = {}
@@ -88,6 +108,7 @@ async def postgres_lifespan(server: FastMCP) -> AsyncIterator[PostgresContext]:
 
 # Create FastMCP server with lifespan
 mcp = FastMCP("PostgreSQL MCP Server", lifespan=postgres_lifespan)
+
 
 @mcp.tool()
 async def execute_query(database: str, query: str) -> str:
@@ -193,7 +214,6 @@ def main() -> None:
         # Update port setting for HTTP transport
         mcp.settings.port = args.port
         mcp.run(transport="streamable-http")
-
 
 
 if __name__ == "__main__":

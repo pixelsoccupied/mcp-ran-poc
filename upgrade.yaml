@@ -85,7 +85,7 @@ spec:
                   upstream: https://api.openshift.com/api/upgrades_info/v1/graph
                   channel: stable-4.17
                   desiredUpdate:
-                    version: 4.17.35
+                    version: 4.17.18
                   # For disconnected environments, add:
                   # upstream: https://mirror.company.com/graph
                   # Or use specific image:
@@ -235,6 +235,3 @@ subjects:
     kind: Policy
     name: ocp-upgrade-olm
 
-
-- demo 
-  AI policy redmiation
